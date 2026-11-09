@@ -8,3 +8,4 @@ local.properties
 *.jks
 *.log
 .DS_Store
+!Wonderdesk-*-debug.apk
