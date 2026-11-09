@@ -46,7 +46,7 @@ object Catalog {
         AppInfo("scribble", "Scribble", "Write a recovered local draft or import and export a UTF-8 text document.", "Export creates a new document, never silently overwrites the source. One draft; no notebooks, rich text or syntax highlighting yet."),
         AppInfo("shutter", "Shutter", "Annotate an image you select and save a new PNG copy.", "Screen capture and recording are not implemented. Use Android's screenshot controls, then open the image here. No silent capture."),
         AppInfo("pulse", "Pulse", "Inspect live battery, memory, storage and device information exposed by Android.", "No unrestricted process list, process killing, GPU/CPU utilization or sensor claims. Unavailable is not zero."),
-        AppInfo("abacus", "Abacus", "Calculate expressions and scientific functions with persistent history.", "Trigonometry uses radians. No symbolic algebra or unit conversions yet."),
+        AppInfo("abacus", "Abacus", "Calculate scientific expressions and convert length, mass and temperature units.", "Trigonometry uses radians. Conversion results are approximate. No symbolic algebra yet."),
         AppInfo("chronicle", "Chronicle", "Browse a local month calendar and create events in your chosen Android calendar app.", "Event editing, accounts, reminders and synchronization belong to the external calendar app. No private calendar database yet."),
         AppInfo("timepiece", "Timepiece", "World clocks and a stopwatch, with official system alarm and timer integration.", "Alarm and timer delivery is delegated to the system clock app, if installed. No Wonderdesk widgets yet."),
         AppInfo("safekeeper", "Safekeeper", "Export selected accessible documents to a verified ZIP and restore into a new folder.", "Not a device/system backup. No private app data, scheduled backups, encryption or incremental snapshots. Test restore before trusting any backup."),
@@ -88,8 +88,10 @@ open class WorkbenchActivity : ComponentActivity() {
 }
 
 enum class WonderLook(val label: String, val dark: Boolean) {
-    AQUA("Aqua Bliss", false), BLISS("Bliss", false), DARK("Dark Bliss", true), SUPER("Super Bliss", true)
+    AQUA("Aqua", false), BLISS("Bliss", false), DARK("Dark Bliss", true), SUPER("Super", true)
 }
+
+enum class WonderMotion(val label: String) { FULL("Full"), REDUCED("Reduced"), OFF("Off") }
 
 @Composable
 fun WonderTheme(content: @Composable () -> Unit) {
@@ -99,7 +101,11 @@ fun WonderTheme(content: @Composable () -> Unit) {
     var look by remember {
         mutableStateOf(runCatching { WonderLook.valueOf(prefs.getString("look", "AQUA") ?: "AQUA") }.getOrDefault(WonderLook.AQUA))
     }
+    var motion by remember {
+        mutableStateOf(runCatching { WonderMotion.valueOf(prefs.getString("motion", "FULL") ?: "FULL") }.getOrDefault(WonderMotion.FULL))
+    }
     val choose: (WonderLook) -> Unit = { look = it; prefs.edit().putString("look", it.name).apply() }
+    val chooseMotion: (WonderMotion) -> Unit = { motion = it; prefs.edit().putString("motion", it.name).apply() }
     SideEffect {
         (context as? Activity)?.window?.let { window ->
             WindowCompat.getInsetsController(window, view).apply {
@@ -114,7 +120,7 @@ fun WonderTheme(content: @Composable () -> Unit) {
         WonderLook.DARK -> darkColorScheme(primary = Color(0xFF93B9FF), secondary = Color(0xFFB1CCF7), background = Color(0xFF23262B), surface = Color(0xFF2E333A), onSurface = Color(0xFFE8E8E8), onBackground = Color(0xFFE8E8E8))
         WonderLook.SUPER -> darkColorScheme(primary = Color(0xFF00F0FF), secondary = Color(0xFFFF2E9A), background = Color(0xFF0D0A1A), surface = Color(0xFF1A1230), onSurface = Color(0xFFF2ECFF), onBackground = Color(0xFFF2ECFF))
     }
-    CompositionLocalProvider(LocalLook provides look, LocalLookPreference provides choose,
+    CompositionLocalProvider(LocalLook provides look, LocalLookPreference provides choose, LocalMotion provides motion, LocalMotionPreference provides chooseMotion,
         LocalIsDark provides look.dark, LocalDarkPreference provides { value -> choose(if (value) WonderLook.DARK else WonderLook.AQUA) }) {
         MaterialTheme(colorScheme = colors) {
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground, content = content)
@@ -124,6 +130,8 @@ fun WonderTheme(content: @Composable () -> Unit) {
 
 val LocalLook = staticCompositionLocalOf { WonderLook.AQUA }
 val LocalLookPreference = staticCompositionLocalOf<(WonderLook) -> Unit> { {} }
+val LocalMotion = staticCompositionLocalOf { WonderMotion.FULL }
+val LocalMotionPreference = staticCompositionLocalOf<(WonderMotion) -> Unit> { {} }
 val LocalDarkPreference = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 val LocalIsDark = staticCompositionLocalOf { false }
 
@@ -136,14 +144,17 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
         val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown" }
         val ecosystem = remember { SharedCatalog.ecosystemVersion(context) }
         val dark = LocalIsDark.current
+        val look = LocalLook.current
+        val motion = LocalMotion.current
         Box(Modifier.fillMaxSize().background(if (transparentBackground) Color.Transparent else MaterialTheme.colorScheme.background)) {
+          if (!transparentBackground || look == WonderLook.AQUA || look == WonderLook.SUPER) WonderBackdrop(look, motion, transparentBackground)
           if (transparentBackground) {
               val bar = if (dark) Color(0xFF172636) else Color(0xFFF1F6FA)
               Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).align(Alignment.TopCenter).background(bar))
               Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars).align(Alignment.BottomCenter).background(bar))
           }
           Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            CompositionLocalProvider(LocalContentColor provides if (look == WonderLook.BLISS || look == WonderLook.SUPER) Color.White else MaterialTheme.colorScheme.onSurface) {
                 Row(Modifier.fillMaxWidth().aquaBrushedMetal(dark).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(app.title, style = MaterialTheme.typography.headlineSmall)
@@ -159,6 +170,8 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
         if (about) {
             val setLook = LocalLookPreference.current
             val selectedLook = LocalLook.current
+            val setMotion = LocalMotionPreference.current
+            val selectedMotion = LocalMotion.current
             AlertDialog(onDismissRequest = { about = false }, title = { Text("${app.title} $version") }, text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(app.description)
@@ -169,6 +182,11 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
                     Text("Appearance (this app)", style = MaterialTheme.typography.titleSmall)
                     WonderLook.entries.forEach { look ->
                         TextButton(onClick = { setLook(look) }) { Text(if (selectedLook == look) "✓ ${look.label}" else look.label) }
+                    }
+                    Text("Motion (this app)", style = MaterialTheme.typography.titleSmall)
+                    Text("Reduced and Off disable ambient motion. Android's animation setting is always respected.", style = MaterialTheme.typography.bodySmall)
+                    WonderMotion.entries.forEach { motion ->
+                        TextButton(onClick = { setMotion(motion) }) { Text(if (selectedMotion == motion) "✓ ${motion.label}" else motion.label) }
                     }
                 }
             }, confirmButton = { TextButton(onClick = { about = false }) { Text("Done") } })

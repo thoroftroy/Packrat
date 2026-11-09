@@ -22,6 +22,7 @@ fun ArchiveScreen(backup: Boolean) {
     var sources by remember { mutableStateOf(listOf<Uri>()) }
     var archive by remember { mutableStateOf<Uri?>(activity.intent.data) }
     var entries by remember { mutableStateOf(listOf<ZipItem>()) }
+    var filter by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf(false) }
     val select = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { values -> sources = values; op.notice("${values.size} source documents selected; no files copied yet.") }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { value -> archive = value; value?.let { context.keepRead(it) } }
@@ -43,6 +44,7 @@ fun ArchiveScreen(backup: Boolean) {
         }
     }
     LaunchedEffect(archive) {
+        entries = emptyList()
         archive?.let { value -> op.run("Reading ZIP and checking CRCs", { ZipEngine.inspect(context.contentResolver.openInputStream(value)!!) }) {
             entries = it; op.notice("ZIP checked: ${it.size} entries. Choose a destination to ${if (backup) "test restore" else "extract"}.")
         } }
@@ -60,8 +62,13 @@ fun ArchiveScreen(backup: Boolean) {
     if (archive != null) TextButton(onClick = { archive?.let { context.share(it, "application/zip", op::notice) } }, enabled = !op.busy) { Text("Share this ZIP") }
     OperationStatus(op)
     Text("Safety limit: 2,000 entries, 64 MiB per file, 256 MiB total. ZIP only; encryption and other formats are not supported.", style = MaterialTheme.typography.bodySmall)
+    if (entries.isNotEmpty()) {
+        val summary = remember(entries) { summarizeArchive(entries) }
+        Text("${summary.files} files · ${summary.directories} folders · ${android.text.format.Formatter.formatShortFileSize(context, summary.bytes)} uncompressed", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(filter, { filter = it.take(512) }, Modifier.fillMaxWidth(), label = { Text("Filter archive paths") }, singleLine = true)
+    }
     LazyColumn(Modifier.fillMaxSize()) {
-        items(entries) { entry -> ListItem(headlineContent = { Text(entry.path) }, supportingContent = { Text(if (entry.directory) "Folder" else "${entry.bytes} bytes · CRC checked") }) }
+        items(filterArchive(entries, filter)) { entry -> ListItem(headlineContent = { Text(entry.path) }, supportingContent = { Text(if (entry.directory) "Folder" else "${entry.bytes} bytes · CRC checked") }) }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Choose restore destination") }, text = { Text("A new ‘Wonderdesk restored’ folder will be created inside the folder you choose. Existing files will not be overwritten. Original ZIP is never deleted. On failure the app tries to remove only its new partial folder.") }, confirmButton = {
         TextButton(onClick = { confirm = false; restore.launch(null) }) { Text("Choose destination") }
