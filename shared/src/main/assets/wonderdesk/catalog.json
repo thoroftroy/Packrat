@@ -1,0 +1,454 @@
+{
+  "brand": "Wonderdesk",
+  "owner": "Rednave",
+  "apps": [
+    {
+      "id": "wayfinder",
+      "name": "Wayfinder",
+      "generic": "File Manager",
+      "aliases": [
+        "file manager",
+        "files",
+        "folders",
+        "finder",
+        "browse files"
+      ],
+      "keywords": [
+        "files",
+        "folders",
+        "browse",
+        "copy",
+        "move"
+      ]
+    },
+    {
+      "id": "packrat",
+      "name": "Packrat",
+      "generic": "Archive Manager",
+      "aliases": [
+        "archive manager",
+        "zip",
+        "extract",
+        "compress",
+        "unzip"
+      ],
+      "keywords": [
+        "zip",
+        "tar",
+        "extract"
+      ]
+    },
+    {
+      "id": "spyglass",
+      "name": "Spyglass",
+      "generic": "Image Viewer",
+      "aliases": [
+        "image viewer",
+        "photo viewer",
+        "open picture"
+      ],
+      "keywords": [
+        "image",
+        "photo",
+        "picture"
+      ]
+    },
+    {
+      "id": "memories",
+      "name": "Memories",
+      "generic": "Photo Library",
+      "aliases": [
+        "photo library",
+        "albums",
+        "organize photos"
+      ],
+      "keywords": [
+        "photos",
+        "albums"
+      ]
+    },
+    {
+      "id": "cinema",
+      "name": "Cinema",
+      "generic": "Video Player",
+      "aliases": [
+        "video player",
+        "movies",
+        "play video"
+      ],
+      "keywords": [
+        "video",
+        "movie",
+        "mpv"
+      ]
+    },
+    {
+      "id": "melody",
+      "name": "Melody",
+      "generic": "Music Player",
+      "aliases": [
+        "music player",
+        "audio player",
+        "songs"
+      ],
+      "keywords": [
+        "music",
+        "audio",
+        "songs",
+        "playlists"
+      ]
+    },
+    {
+      "id": "pages",
+      "name": "Pages",
+      "generic": "Document Viewer",
+      "aliases": [
+        "pdf viewer",
+        "document viewer",
+        "read pdf"
+      ],
+      "keywords": [
+        "pdf",
+        "document"
+      ]
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway",
+      "generic": "Terminal",
+      "aliases": [
+        "terminal",
+        "console",
+        "command line",
+        "shell"
+      ],
+      "keywords": [
+        "terminal",
+        "shell"
+      ]
+    },
+    {
+      "id": "scribble",
+      "name": "Scribble",
+      "generic": "Text Editor",
+      "aliases": [
+        "text editor",
+        "notes",
+        "markdown editor",
+        "write"
+      ],
+      "keywords": [
+        "text",
+        "notes",
+        "markdown"
+      ]
+    },
+    {
+      "id": "shutter",
+      "name": "Shutter",
+      "generic": "Screenshot",
+      "aliases": [
+        "screenshot",
+        "screen capture",
+        "screen recorder"
+      ],
+      "keywords": [
+        "screenshot",
+        "record"
+      ]
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "generic": "System Monitor",
+      "aliases": [
+        "system monitor",
+        "task manager",
+        "cpu",
+        "gpu",
+        "memory",
+        "processes",
+        "performance"
+      ],
+      "keywords": [
+        "cpu",
+        "memory",
+        "processes"
+      ]
+    },
+    {
+      "id": "abacus",
+      "name": "Abacus",
+      "generic": "Calculator",
+      "aliases": [
+        "calculator",
+        "math",
+        "scientific calculator",
+        "unit conversion"
+      ],
+      "keywords": [
+        "calc",
+        "math",
+        "convert"
+      ]
+    },
+    {
+      "id": "chronicle",
+      "name": "Chronicle",
+      "generic": "Calendar",
+      "aliases": [
+        "calendar",
+        "events",
+        "appointments",
+        "schedule"
+      ],
+      "keywords": [
+        "calendar",
+        "events"
+      ]
+    },
+    {
+      "id": "timepiece",
+      "name": "Timepiece",
+      "generic": "Clock",
+      "aliases": [
+        "clock",
+        "alarm",
+        "timer",
+        "stopwatch",
+        "world clock"
+      ],
+      "keywords": [
+        "clock",
+        "alarm",
+        "timer"
+      ]
+    },
+    {
+      "id": "safekeeper",
+      "name": "Safekeeper",
+      "generic": "Backup",
+      "aliases": [
+        "backup",
+        "restore",
+        "system backup"
+      ],
+      "keywords": [
+        "backup",
+        "restore",
+        "snapshot"
+      ]
+    },
+    {
+      "id": "beacon",
+      "name": "Beacon",
+      "generic": "Search",
+      "aliases": [
+        "search",
+        "find files",
+        "application search"
+      ],
+      "keywords": [
+        "search",
+        "find"
+      ]
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "generic": "Password Manager",
+      "aliases": [
+        "password manager",
+        "passwords",
+        "secrets"
+      ],
+      "keywords": [
+        "password",
+        "secrets"
+      ]
+    },
+    {
+      "id": "control-room",
+      "name": "Control Room",
+      "generic": "Settings",
+      "aliases": [
+        "settings",
+        "preferences",
+        "configuration"
+      ],
+      "keywords": [
+        "settings"
+      ]
+    },
+    {
+      "id": "connections",
+      "name": "Connections",
+      "generic": "Network Manager",
+      "aliases": [
+        "network",
+        "wifi",
+        "vpn"
+      ],
+      "keywords": [
+        "network",
+        "wifi"
+      ]
+    },
+    {
+      "id": "devices",
+      "name": "Devices",
+      "generic": "Bluetooth Manager",
+      "aliases": [
+        "bluetooth",
+        "devices"
+      ],
+      "keywords": [
+        "bluetooth"
+      ]
+    },
+    {
+      "id": "diskworm",
+      "name": "Diskworm",
+      "generic": "Disk Manager",
+      "aliases": [
+        "disks",
+        "partitions",
+        "disk usage"
+      ],
+      "keywords": [
+        "disk",
+        "partition"
+      ]
+    },
+    {
+      "id": "palette",
+      "name": "Palette",
+      "generic": "Color Picker",
+      "aliases": [
+        "color picker",
+        "colors"
+      ],
+      "keywords": [
+        "color"
+      ]
+    },
+    {
+      "id": "typeface",
+      "name": "Typeface",
+      "generic": "Font Manager",
+      "aliases": [
+        "fonts",
+        "font manager"
+      ],
+      "keywords": [
+        "font"
+      ]
+    },
+    {
+      "id": "scrapbook",
+      "name": "Scrapbook",
+      "generic": "Clipboard Manager",
+      "aliases": [
+        "clipboard",
+        "clipboard history"
+      ],
+      "keywords": [
+        "clipboard"
+      ]
+    },
+    {
+      "id": "workshop",
+      "name": "Workshop",
+      "generic": "Device Manager",
+      "aliases": [
+        "hardware",
+        "drivers",
+        "device manager"
+      ],
+      "keywords": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "printshop",
+      "name": "Printshop",
+      "generic": "Printers",
+      "aliases": [
+        "printers",
+        "scanners",
+        "print"
+      ],
+      "keywords": [
+        "print",
+        "scan"
+      ]
+    },
+    {
+      "id": "app-hub",
+      "name": "App Hub",
+      "generic": "Software Center",
+      "aliases": [
+        "software center",
+        "app store",
+        "install applications",
+        "updates"
+      ],
+      "keywords": [
+        "install",
+        "update"
+      ]
+    },
+    {
+      "id": "welcome",
+      "name": "Welcome",
+      "generic": "Setup",
+      "aliases": [
+        "welcome",
+        "setup",
+        "first run"
+      ],
+      "keywords": [
+        "welcome",
+        "setup"
+      ]
+    },
+    {
+      "id": "guidebook",
+      "name": "Guidebook",
+      "generic": "Help",
+      "aliases": [
+        "help",
+        "documentation",
+        "manual"
+      ],
+      "keywords": [
+        "help"
+      ]
+    },
+    {
+      "id": "checkup",
+      "name": "Checkup",
+      "generic": "Diagnostics",
+      "aliases": [
+        "diagnostics",
+        "system check",
+        "report"
+      ],
+      "keywords": [
+        "diagnostics"
+      ]
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "generic": "Downloads",
+      "aliases": [
+        "downloads",
+        "download manager"
+      ],
+      "keywords": [
+        "download"
+      ]
+    }
+  ]
+}

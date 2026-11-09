@@ -1,0 +1,37 @@
+Wonderdesk by Rednave
+Wonderdesk's own source is licensed under the repository LICENSE. That permission
+does not replace licenses or attribution requirements of third-party components.
+
+This Android build uses these Apache License 2.0 components:
+
+AndroidX / Jetpack (Core 1.13.1, Activity 1.9.2, Compose 1.6.8,
+Material3 1.2.1, Material icons/ripple 1.6.0, DocumentFile 1.0.1,
+Media3 1.4.1, and their AndroidX runtime dependencies).
+Copyright The Android Open Source Project and respective contributors.
+https://android.googlesource.com/platform/frameworks/support/
+https://github.com/androidx/media/tree/1.4.1
+
+Kotlin standard library 1.9.24 and compatibility JDK libraries 1.8.20.
+Copyright 2010-2023 JetBrains s.r.o. and respective authors and developers.
+https://github.com/JetBrains/kotlin/tree/v1.9.24
+
+kotlinx.coroutines 1.7.1.
+Copyright JetBrains s.r.o. and Kotlin Programming Language contributors.
+https://github.com/Kotlin/kotlinx.coroutines/tree/1.7.1
+
+Guava 33.0.0-android and failureaccess 1.0.2.
+Copyright Google Inc. and respective Guava contributors.
+https://github.com/google/guava
+
+JetBrains Java annotations 23.0.0.
+Copyright JetBrains s.r.o.
+https://github.com/JetBrains/java-annotations
+
+A complete copy of Apache License 2.0 is supplied alongside this notice.
+The application uses Android's installed framework/media/cryptography services;
+it does not redistribute the Android OS, Google Play services or SDK system image.
+Test-only JUnit/AndroidX test libraries are not included in product APKs.
+
+TEMP artwork: simple text/gradient placeholders await owner-created artwork.
+Installed third-party application icons remain their owners' work, provided by
+Android's PackageManager, not approved Wonderdesk primary artwork.

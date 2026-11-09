@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:mimeType="*/*" /></intent>
+    </queries>
+    <application android:theme="@style/WonderdeskTheme" android:allowBackup="false" android:supportsRtl="true" android:icon="@drawable/wonderdesk_application_icon" android:roundIcon="@drawable/wonderdesk_application_icon" />
+</manifest>

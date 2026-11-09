@@ -1,0 +1,41 @@
+{
+  "ecosystem": "0.2.22",
+  "apps": {
+    "wayfinder": "0.2.4",
+    "packrat": "0.2.5",
+    "spyglass": "0.2.3",
+    "memories": "0.2.3",
+    "cinema": "0.2.3",
+    "melody": "0.2.4",
+    "pages": "0.2.3",
+    "gateway": "0.2.2",
+    "scribble": "0.2.3",
+    "shutter": "0.2.3",
+    "pulse": "0.2.3",
+    "abacus": "0.2.4",
+    "chronicle": "0.2.3",
+    "timepiece": "0.2.4",
+    "safekeeper": "0.2.3",
+    "beacon": "0.2.3",
+    "vault": "0.3.2",
+    "control-room": "0.2.5",
+    "connections": "0.2.0",
+    "devices": "0.2.0",
+    "diskworm": "0.2.0",
+    "palette": "0.2.0",
+    "typeface": "0.2.0",
+    "scrapbook": "0.2.0",
+    "workshop": "0.2.0",
+    "printshop": "0.2.0",
+    "app-hub": "0.2.4",
+    "welcome": "0.2.0",
+    "guidebook": "0.2.0",
+    "checkup": "0.2.0",
+    "fetch": "0.2.0",
+    "launcher": "0.2.8"
+  },
+  "tools": {
+    "installer": "0.2.2",
+    "lab-manager": "0.2.2"
+  }
+}
