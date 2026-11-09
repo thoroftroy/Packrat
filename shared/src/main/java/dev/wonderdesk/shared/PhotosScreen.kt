@@ -73,7 +73,7 @@ fun PhotosScreen(library: Boolean) {
         if (initial != null) op.run("Opening image", { PhotoRef(initial, context.displayName(initial)) }) { photos = listOf(it); selected = it; op.notice("Image opened") }
         else if (library) op.run("Loading saved collection", {
             val saved = JSONArray(prefs.getString("uris", "[]"))
-            (0 until saved.length()).map { Uri.parse(saved.getString(it)) }.map { uri -> PhotoRef(uri, runCatching { context.displayName(uri) }.getOrDefault("Access unavailable — select again")) }
+            (0 until saved.length()).map { Uri.parse(saved.getString(it)) }.map { uri -> PhotoRef(uri, runCatching { context.displayName(uri) }.getOrDefault("That file could not be read. Select it again.")) }
         }) { photos = it; op.notice("${it.size} saved references. Missing permissions require selecting the photo again.") }
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

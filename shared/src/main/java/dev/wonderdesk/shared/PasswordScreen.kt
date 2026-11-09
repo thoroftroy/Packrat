@@ -60,7 +60,7 @@ fun PasswordScreen() {
         onDispose { activity.lifecycle.removeObserver(observer); clearOwnClipboard(); handler.removeCallbacksAndMessages(null); activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Password generator — preview", style = MaterialTheme.typography.titleLarge)
+        Text("Try the password generator", style = MaterialTheme.typography.titleLarge)
         Text("Vault does not store credentials yet. It is not a reviewed password manager. Generated values stay in memory only and are cleared when you leave.")
         Text("Length: ${length.toInt()} characters")
         Slider(length, { length = it }, valueRange = 12f..64f, steps = 51)
