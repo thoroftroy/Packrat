@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +49,7 @@ object Catalog {
         AppInfo("scribble", "Scribble", "Write a recovered local draft or import and export a UTF-8 text document.", "Export creates a new document, never silently overwrites the source. One draft; no notebooks, rich text or syntax highlighting yet."),
         AppInfo("shutter", "Shutter", "Annotate an image you select and save a new PNG copy.", "Screen capture and recording are not implemented. Use Android's screenshot controls, then open the image here. No silent capture."),
         AppInfo("pulse", "Pulse", "Inspect live battery, memory, storage and device information exposed by Android.", "No unrestricted process list, process killing, GPU/CPU utilization or sensor claims. Unavailable is not zero."),
-        AppInfo("abacus", "Abacus", "Calculate scientific expressions and convert length, mass and temperature units.", "Trigonometry uses radians. Conversion results are approximate. No symbolic algebra yet."),
+        AppInfo("abacus", "Abacus", "Calculate scientific expressions and convert length, mass and temperature units.", "Trigonometry uses selectable radians or degrees. Conversion results are approximate. No symbolic algebra yet."),
         AppInfo("chronicle", "Chronicle", "Browse a local month calendar and create events in your chosen Android calendar app.", "Event editing, accounts, reminders and synchronization belong to the external calendar app. No private calendar database yet."),
         AppInfo("timepiece", "Timepiece", "World clocks and a stopwatch, with official system alarm and timer integration.", "Alarm and timer delivery is delegated to the system clock app, if installed. No Wonderdesk widgets yet."),
         AppInfo("safekeeper", "Safekeeper", "Export selected accessible documents to a verified ZIP and restore into a new folder.", "Not a device/system backup. No private app data, scheduled backups, encryption or incremental snapshots. Test restore before trusting any backup."),
@@ -122,7 +125,7 @@ fun WonderTheme(content: @Composable () -> Unit) {
     }
     CompositionLocalProvider(LocalLook provides look, LocalLookPreference provides choose, LocalMotion provides motion, LocalMotionPreference provides chooseMotion,
         LocalIsDark provides look.dark, LocalDarkPreference provides { value -> choose(if (value) WonderLook.DARK else WonderLook.AQUA) }) {
-        MaterialTheme(colorScheme = colors) {
+        MaterialTheme(colorScheme = colors, typography = wonderTypography(look)) {
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground, content = content)
         }
     }
@@ -146,7 +149,9 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
         val dark = LocalIsDark.current
         val look = LocalLook.current
         val motion = LocalMotion.current
-        Box(Modifier.fillMaxSize().background(if (transparentBackground) Color.Transparent else MaterialTheme.colorScheme.background)) {
+        val density = LocalDensity.current.density
+        val fx = remember { WonderMotionField() }
+        Box(Modifier.fillMaxSize().wonderFx(fx, motion != WonderMotion.OFF, look, motion == WonderMotion.FULL, density).background(if (transparentBackground) Color.Transparent else MaterialTheme.colorScheme.background)) {
           if (!transparentBackground || look == WonderLook.AQUA || look == WonderLook.SUPER) WonderBackdrop(look, motion, transparentBackground)
           if (transparentBackground) {
               val bar = if (dark) Color(0xFF172636) else Color(0xFFF1F6FA)
@@ -156,6 +161,15 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
           Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
             CompositionLocalProvider(LocalContentColor provides if (look == WonderLook.BLISS || look == WonderLook.SUPER) Color.White else MaterialTheme.colorScheme.onSurface) {
                 Row(Modifier.fillMaxWidth().aquaBrushedMetal(dark).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    val brand = when (look) {
+                        WonderLook.AQUA -> R.drawable.aqua_brand
+                        WonderLook.SUPER -> R.drawable.super_brand
+                        else -> null
+                    }
+                    if (brand != null) Image(
+                        painterResource(brand), null,
+                        Modifier.size(width = 46.dp, height = 26.dp).align(Alignment.CenterVertically)
+                    )
                     Column(Modifier.weight(1f)) {
                         Text(app.title, style = MaterialTheme.typography.headlineSmall)
                         Text("App $version · Wonderdesk $ecosystem · preview", style = MaterialTheme.typography.labelSmall)
@@ -166,32 +180,17 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
             Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)))
             Column(Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
           }
+          WonderFxOverlay(fx)
         }
         if (about) {
-            val setLook = LocalLookPreference.current
-            val selectedLook = LocalLook.current
-            val setMotion = LocalMotionPreference.current
-            val selectedMotion = LocalMotion.current
-            AlertDialog(onDismissRequest = { about = false }, title = { Text("${app.title} $version") }, text = {
+            WonderDialog(onDismissRequest = { about = false }, title = { Text("${app.title} $version") }, text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(app.description)
-                    Text(app.limits)
-                    Text("Local-first. No analytics or automatic upload. App-specific artwork is still TEMP where not supplied by the owner.", style = MaterialTheme.typography.bodySmall)
-                    Text("Wonderdesk by Rednave. Own source may be used and distributed without credit. Third-party components retain their licenses.", style = MaterialTheme.typography.bodySmall)
+                    AboutBody(app, version)
                     TextButton(onClick = { licenses = true }) { Text("Third-party licenses") }
-                    Text("Appearance (this app)", style = MaterialTheme.typography.titleSmall)
-                    WonderLook.entries.forEach { look ->
-                        TextButton(onClick = { setLook(look) }) { Text(if (selectedLook == look) "✓ ${look.label}" else look.label) }
-                    }
-                    Text("Motion (this app)", style = MaterialTheme.typography.titleSmall)
-                    Text("Reduced and Off disable ambient motion. Android's animation setting is always respected.", style = MaterialTheme.typography.bodySmall)
-                    WonderMotion.entries.forEach { motion ->
-                        TextButton(onClick = { setMotion(motion) }) { Text(if (selectedMotion == motion) "✓ ${motion.label}" else motion.label) }
-                    }
                 }
             }, confirmButton = { TextButton(onClick = { about = false }) { Text("Done") } })
         }
-        if (licenses) AlertDialog(onDismissRequest = { licenses = false }, title = { Text("Third-party licenses") }, text = {
+        if (licenses) WonderDialog(onDismissRequest = { licenses = false }, title = { Text("Third-party licenses") }, text = {
             val text = remember { listOf("NOTICE.txt", "APACHE-2.0.txt").joinToString("\n\n") { name -> context.assets.open("licenses/$name").bufferedReader().use { it.readText() } } }
             Text(text, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall)
         }, confirmButton = { TextButton(onClick = { licenses = false }) { Text("Close") } })

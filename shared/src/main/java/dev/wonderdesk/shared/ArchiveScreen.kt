@@ -23,6 +23,8 @@ fun ArchiveScreen(backup: Boolean) {
     var archive by remember { mutableStateOf<Uri?>(activity.intent.data) }
     var entries by remember { mutableStateOf(listOf<ZipItem>()) }
     var filter by remember { mutableStateOf("") }
+    var order by remember { mutableStateOf(ArchiveOrder.PATH) }
+    var sortMenu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     val select = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { values -> sources = values; op.notice("${values.size} source documents selected; no files copied yet.") }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { value -> archive = value; value?.let { context.keepRead(it) } }
@@ -66,9 +68,15 @@ fun ArchiveScreen(backup: Boolean) {
         val summary = remember(entries) { summarizeArchive(entries) }
         Text("${summary.files} files · ${summary.directories} folders · ${android.text.format.Formatter.formatShortFileSize(context, summary.bytes)} uncompressed", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(filter, { filter = it.take(512) }, Modifier.fillMaxWidth(), label = { Text("Filter archive paths") }, singleLine = true)
+        Box {
+            TextButton(onClick = { sortMenu = true }) { Text("Sort: ${order.label} ▾") }
+            DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                ArchiveOrder.entries.forEach { choice -> DropdownMenuItem(text = { Text(choice.label) }, onClick = { order = choice; sortMenu = false }) }
+            }
+        }
     }
     LazyColumn(Modifier.fillMaxSize()) {
-        items(filterArchive(entries, filter)) { entry -> ListItem(headlineContent = { Text(entry.path) }, supportingContent = { Text(if (entry.directory) "Folder" else "${entry.bytes} bytes · CRC checked") }) }
+        items(sortArchiveEntries(filterArchive(entries, filter), order)) { entry -> ListItem(headlineContent = { Text(entry.path) }, supportingContent = { Text(if (entry.directory) "Folder" else "${entry.bytes} bytes · CRC checked") }) }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Choose restore destination") }, text = { Text("A new ‘Wonderdesk restored’ folder will be created inside the folder you choose. Existing files will not be overwritten. Original ZIP is never deleted. On failure the app tries to remove only its new partial folder.") }, confirmButton = {
         TextButton(onClick = { confirm = false; restore.launch(null) }) { Text("Choose destination") }

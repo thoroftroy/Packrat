@@ -14,4 +14,11 @@ class ArchiveIndexTest {
         assertEquals(items, filterArchive(items, "  "))
         assertEquals(emptyList<ZipItem>(), filterArchive(items, "missing"))
     }
+    @Test fun entriesSortByPathOrSizeWithFoldersFirst() {
+        val dir = ZipItem("Photos", 0, true)
+        val big = ZipItem("b.txt", 50, false)
+        val small = ZipItem("a.txt", 3, false)
+        assertEquals(listOf(dir, small, big), sortArchiveEntries(listOf(big, dir, small), ArchiveOrder.PATH))
+        assertEquals(listOf(dir, big, small), sortArchiveEntries(listOf(small, dir, big), ArchiveOrder.SIZE))
+    }
 }
