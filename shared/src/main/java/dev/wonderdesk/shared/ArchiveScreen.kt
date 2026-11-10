@@ -1,5 +1,6 @@
 package dev.wonderdesk.shared
 
+import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
@@ -61,7 +62,10 @@ fun ArchiveScreen(backup: Boolean) {
         AquaSecondaryButton(onClick = { open.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !op.busy) { Text("Open ZIP") }
         AquaSecondaryButton(onClick = { confirm = true }, enabled = archive != null && entries.isNotEmpty() && !op.busy) { Text(if (backup) "Restore…" else "Extract…") }
     }
-    if (archive != null) TextButton(onClick = { archive?.let { context.share(it, "application/zip", op::notice) } }, enabled = !op.busy) { Text("Share this ZIP") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AquaSecondaryButton(onClick = { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setClassName("dev.wonderdesk.wayfinder", "dev.wonderdesk.wayfinder.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), op::notice) }) { Text("Browse files in Wayfinder") }
+        if (archive != null) TextButton(onClick = { archive?.let { context.share(it, "application/zip", op::notice) } }, enabled = !op.busy) { Text("Share this ZIP") }
+    }
     OperationStatus(op)
     Text("Safety limit: 2,000 entries, 64 MiB per file, 256 MiB total. ZIP only; encryption and other formats are not supported.", style = MaterialTheme.typography.bodySmall)
     if (entries.isNotEmpty()) {
