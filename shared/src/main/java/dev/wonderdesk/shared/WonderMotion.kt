@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -138,9 +142,16 @@ class WonderMotionField(seed: Long = 0xB1155L) {
     }
 
     fun clear() { sparks.clear(); rings.clear(); seeded = false }
+
+    /** Called after a tap adds effects so the overlay wakes up. */
+    var onBurst: (() -> Unit)? = null
 }
 
-/** Ambient tap-burst overlay. Never consumes input; honors motion + system settings. */
+/**
+ * Tap ripples and sparks. Sleeps completely until something is tapped: frames run on vsync only
+ * while an effect is alive (or the Super look's ambient sparks are on), and never while the app
+ * is in the background. Never consumes input; honors the motion setting and Android's own.
+ */
 @Composable
 fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() }) {
     val look = LocalLook.current
@@ -148,31 +159,37 @@ fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() })
     val systemMotion = remember { ValueAnimator.areAnimatorsEnabled() }
     val active = motion != WonderMotion.OFF && systemMotion
     val density = LocalDensity.current.density
+    val resumed = rememberIsResumed()
+    val ambient = motion == WonderMotion.FULL && look == WonderLook.SUPER
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        var frame by remember { mutableStateOf(0L) }
-        LaunchedEffect(look, motion, systemMotion, w, h) {
-            field.clear()
-            if (!active) return@LaunchedEffect
+        var wake by remember { mutableIntStateOf(0) }
+        var tick by remember { mutableLongStateOf(0L) }
+        DisposableEffect(field) { field.onBurst = { wake++ }; onDispose { field.onBurst = null } }
+        LaunchedEffect(look, motion, w, h) { field.clear() }
+        LaunchedEffect(active, resumed, ambient, wake, w, h) {
+            if (!active || !resumed) return@LaunchedEffect
             var last = 0L
-            while (isActive) {
-                kotlinx.coroutines.delay(50L)
-                val now = System.currentTimeMillis()
-                val dt = if (last == 0L) 0.05f else ((now - last) / 1000f).coerceIn(0f, 0.2f)
-                last = now
-                field.step(dt, w / density, h / density, motion == WonderMotion.FULL && look == WonderLook.SUPER)
-                frame++
+            while (isActive && (ambient || field.sparks.isNotEmpty() || field.rings.isNotEmpty())) {
+                // Ambient-only periods run at half rate to save power; taps run at full vsync.
+                if (ambient && field.rings.isEmpty() && field.sparks.none { !it.ambient }) kotlinx.coroutines.delay(24L)
+                withFrameNanos { now ->
+                    val dt = if (last == 0L) 0.016f else ((now - last) / 1e9f).coerceIn(0f, 0.05f)
+                    last = now
+                    field.step(dt, w / density, h / density, ambient)
+                    tick = now
+                }
             }
+            tick = -1L
         }
         if (!active) return@BoxWithConstraints
-        if (field.sparks.isEmpty() && field.rings.isEmpty()) return@BoxWithConstraints
         val retro = look != WonderLook.AQUA && look != WonderLook.SUPER
         Canvas(Modifier.fillMaxSize()) {
+            if (tick == 0L) return@Canvas
             for (ring in field.rings) {
                 val fraction = (ring.age / 1.1f).coerceIn(0f, 1f)
                 val spread = if (retro) 34f else if (motion != WonderMotion.FULL) 38f else 100f
-                // Field coordinates are dp; convert to px here.
                 val scale = density
                 val radius = (9f + fraction * spread) * scale
                 val alpha = ((1f - fraction) * if (look == WonderLook.AQUA) 130 else 200).toInt()
@@ -201,7 +218,6 @@ fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() })
                 drawCircle(c, radius = max(1f, p.radius * if (p.ambient) 3f else 5f) * density, center = Offset(p.x * density, p.y * density))
             }
         }
-        @Suppress("UNUSED_EXPRESSION") frame
     }
 }
 
@@ -220,6 +236,7 @@ fun Modifier.wonderFx(
                 val position = event.changes.firstOrNull()?.position
                 if (position != null) {
                     field.burst(position.x / density, position.y / density, look, full, density)
+                    field.onBurst?.invoke()
                 }
             }
         }

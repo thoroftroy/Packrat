@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /* ------------------------------------------------------------------------------------------
  * WonderKit: the shared app chrome and controls for every Wonderdesk app.
@@ -758,7 +759,9 @@ fun relativeTime(ms: Long): String {
 /** Reads the look and motion chosen in Control Room. Null when Control Room isn't installed. */
 object GlobalAppearance {
     val URI: android.net.Uri = android.net.Uri.parse("content://dev.wonderdesk.controlroom.appearance/current")
-    fun read(context: Context): Pair<WonderLook, WonderMotion>? = runCatching {
+    @Volatile var cached: Pair<WonderLook, WonderMotion>? = null
+    fun read(context: Context): Pair<WonderLook, WonderMotion>? = readNow(context).also { cached = it }
+    private fun readNow(context: Context): Pair<WonderLook, WonderMotion>? = runCatching {
         context.contentResolver.query(URI, null, null, null, null)?.use { c ->
             if (!c.moveToFirst()) return@use null
             val look = runCatching { WonderLook.valueOf(c.getString(c.getColumnIndexOrThrow("look"))) }.getOrDefault(WonderLook.AQUA)
@@ -783,10 +786,17 @@ fun WonderKitTheme(content: @Composable () -> Unit) {
     var follow by remember { mutableStateOf(prefs.getBoolean("follow_suite", true)) }
     var ownLook by remember { mutableStateOf(runCatching { WonderLook.valueOf(prefs.getString("look", "AQUA") ?: "AQUA") }.getOrDefault(WonderLook.AQUA)) }
     var ownMotion by remember { mutableStateOf(runCatching { WonderMotion.valueOf(prefs.getString("motion", "FULL") ?: "FULL") }.getOrDefault(WonderMotion.FULL)) }
-    var global by remember { mutableStateOf(GlobalAppearance.read(context)) }
+    var global by remember { mutableStateOf(GlobalAppearance.cached ?: GlobalAppearance.read(context)) }
     val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     DisposableEffect(owner) {
-        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) global = GlobalAppearance.read(context) }
+        // Re-check Control Room off the main thread when the app comes back, so resuming never stutters.
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) scope.launch {
+                val g = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { GlobalAppearance.read(context) }
+                if (g != global) global = g
+            }
+        }
         owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
     }
     val look = if (follow && global != null) global!!.first else ownLook
@@ -814,3 +824,166 @@ fun WonderKitTheme(content: @Composable () -> Unit) {
         }
     }
 }
+
+/* ------------------------------------- battery-friendly clocks ------------------------------------ */
+
+/** True while the app is on screen (resumed). Use it to pause anything that animates or polls. */
+@Composable
+fun rememberIsResumed(): Boolean {
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var resumed by remember(owner) { mutableStateOf(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) }
+    DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, _ -> resumed = owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) }
+        owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    return resumed
+}
+
+/**
+ * The current time, refreshed every [periodMs] on the period boundary (so a minute clock flips
+ * exactly on the minute) and only while the app is visible. Nothing runs in the background.
+ */
+@Composable
+fun rememberNow(periodMs: Long, enabled: Boolean = true): Long {
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var started by remember(owner) { mutableStateOf(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) }
+    DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, _ -> started = owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) }
+        owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val now = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(periodMs, enabled, started) {
+        if (!enabled || !started) return@LaunchedEffect
+        while (true) {
+            val t = System.currentTimeMillis(); now.longValue = t
+            delay((periodMs - t % periodMs).coerceAtLeast(16L))
+        }
+    }
+    return now.longValue
+}
+
+/* ---------------------------------------- special access ---------------------------------------- */
+
+/**
+ * Android hides some powerful switches (usage access, accessibility, notification access, all-files)
+ * behind settings screens, and for apps installed outside an app store it may also block them as a
+ * "restricted setting" until the user allows it from App info. [SpecialAccess] opens the exact
+ * screen for this app, and [AccessGuide] walks the user through both steps.
+ */
+object SpecialAccess {
+    enum class Kind(val title: String, val settingName: String) {
+        USAGE("Usage access", "Usage access"),
+        ACCESSIBILITY("Accessibility", "Accessibility"),
+        NOTIFICATIONS("Notification access", "Notification access"),
+        ALL_FILES("All files access", "All files access"),
+        EXACT_ALARMS("Alarms & reminders", "Alarms & reminders"),
+        FULL_SCREEN("Full-screen alerts", "Full-screen notifications"),
+        AUTOFILL("Autofill service", "Autofill service"),
+        WRITE_SETTINGS("Modify system settings", "Modify system settings"),
+        DND("Do Not Disturb access", "Do Not Disturb access"),
+        INSTALL("Install unknown apps", "Install unknown apps"),
+    }
+
+    /** These may be blocked as "restricted settings" for sideloaded apps on Android 13 and newer. */
+    fun canBeRestricted(kind: Kind) = android.os.Build.VERSION.SDK_INT >= 33 && kind in setOf(Kind.ACCESSIBILITY, Kind.NOTIFICATIONS, Kind.USAGE)
+
+    /** Whether Android has already let this app use restricted settings (null when it can't tell). */
+    fun restrictedAllowed(c: Context): Boolean? = if (android.os.Build.VERSION.SDK_INT < 33) true else runCatching {
+        val ops = c.getSystemService(android.app.AppOpsManager::class.java)
+        val mode = ops.unsafeCheckOpNoThrow("android:access_restricted_settings", android.os.Process.myUid(), c.packageName)
+        mode == android.app.AppOpsManager.MODE_ALLOWED || mode == android.app.AppOpsManager.MODE_DEFAULT
+    }.getOrNull()
+
+    fun granted(c: Context, kind: Kind, component: Class<*>? = null): Boolean = runCatching {
+        when (kind) {
+            Kind.USAGE -> {
+                val ops = c.getSystemService(android.app.AppOpsManager::class.java)
+                ops.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), c.packageName) == android.app.AppOpsManager.MODE_ALLOWED
+            }
+            Kind.ACCESSIBILITY -> {
+                val on = android.provider.Settings.Secure.getString(c.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+                on.split(':').any { it.startsWith(c.packageName + "/") && (component == null || it.endsWith(component.name) || it.endsWith(component.simpleName)) }
+            }
+            Kind.NOTIFICATIONS -> androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(c).contains(c.packageName)
+            Kind.ALL_FILES -> android.os.Environment.isExternalStorageManager()
+            Kind.EXACT_ALARMS -> android.os.Build.VERSION.SDK_INT < 31 || c.getSystemService(android.app.AlarmManager::class.java).canScheduleExactAlarms()
+            Kind.FULL_SCREEN -> android.os.Build.VERSION.SDK_INT < 34 || c.getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent()
+            Kind.AUTOFILL -> c.getSystemService(android.view.autofill.AutofillManager::class.java)?.hasEnabledAutofillServices() == true
+            Kind.WRITE_SETTINGS -> android.provider.Settings.System.canWrite(c)
+            Kind.DND -> c.getSystemService(android.app.NotificationManager::class.java).isNotificationPolicyAccessGranted
+            Kind.INSTALL -> c.packageManager.canRequestPackageInstalls()
+        }
+    }.getOrDefault(false)
+
+    /** Opens the most specific screen Android offers for this app and [kind]. */
+    fun open(c: Context, kind: Kind, component: Class<*>? = null) {
+        val pkg = android.net.Uri.parse("package:" + c.packageName)
+        val S = android.provider.Settings::class.java
+        val tries: List<android.content.Intent> = when (kind) {
+            Kind.USAGE -> listOf(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS, pkg), android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            Kind.ACCESSIBILITY -> listOfNotNull(
+                if (android.os.Build.VERSION.SDK_INT >= 33 && component != null) android.content.Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                    .putExtra(android.content.Intent.EXTRA_COMPONENT_NAME, android.content.ComponentName(c, component).flattenToString()) else null,
+                android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            Kind.NOTIFICATIONS -> listOfNotNull(
+                if (android.os.Build.VERSION.SDK_INT >= 30 && component != null) android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, android.content.ComponentName(c, component).flattenToString()) else null,
+                android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            Kind.ALL_FILES -> listOf(android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, pkg), android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            Kind.EXACT_ALARMS -> listOf(android.content.Intent("android.settings.REQUEST_SCHEDULE_EXACT_ALARM", pkg))
+            Kind.FULL_SCREEN -> listOf(android.content.Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT", pkg))
+            Kind.AUTOFILL -> listOf(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, pkg))
+            Kind.WRITE_SETTINGS -> listOf(android.content.Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS, pkg))
+            Kind.DND -> listOf(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            Kind.INSTALL -> listOf(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, pkg))
+        } + android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+        for (i in tries) {
+            if (runCatching { c.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return
+        }
+    }
+
+    fun openAppInfo(c: Context) = runCatching {
+        c.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + c.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+/**
+ * Step-by-step sheet for turning on a special permission. Checks again every time the user comes
+ * back to the app and calls [onGranted] (then closes) as soon as it's on.
+ */
+@Composable
+fun AccessGuide(kind: SpecialAccess.Kind, why: String, onDismiss: () -> Unit, component: Class<*>? = null, onGranted: () -> Unit = {}) {
+    val context = LocalContext.current
+    val p = wonderPalette()
+    val resumed = rememberIsResumed()
+    var granted by remember { mutableStateOf(SpecialAccess.granted(context, kind, component)) }
+    var opened by remember { mutableStateOf(false) }
+    var allowed by remember { mutableStateOf(SpecialAccess.restrictedAllowed(context)) }
+    LaunchedEffect(resumed) {
+        if (resumed) {
+            granted = SpecialAccess.granted(context, kind, component); allowed = SpecialAccess.restrictedAllowed(context)
+            if (granted) { onGranted(); onDismiss() }
+        }
+    }
+    val restricted = SpecialAccess.canBeRestricted(kind) && allowed != true
+    WonderDialog(onDismissRequest = onDismiss, title = { Text("Turn on ${kind.title}") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(why, style = MaterialTheme.typography.bodyMedium)
+            Panel {
+                ListRow("Open ${kind.settingName}", subtitle = "Find ${appLabel(context)} and switch it on", icon = WonderIcons.Settings, tint = p.accent, chevron = true,
+                    trailing = if (granted) ({ Icon(WonderIcons.CheckCircle, null, tint = p.success) }) else null,
+                    onClick = { opened = true; SpecialAccess.open(context, kind, component) })
+                if (restricted) {
+                    PanelDivider()
+                    ListRow("Greyed out or “Restricted setting”?", subtitle = "App info → ⋮ → Allow restricted settings, then step 1 again",
+                        icon = WonderIcons.Shield, tint = p.warning, chevron = true, onClick = { SpecialAccess.openAppInfo(context) })
+                }
+            }
+            if (opened && !granted) Text("Still off. Switch it on in Settings, then come back here.", style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+        }
+    }, confirmButton = {
+        TextButton(onClick = { opened = true; SpecialAccess.open(context, kind, component) }) { Text(if (opened) "Open again" else "Open Settings") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } })
+}
+
+fun appLabel(c: Context): String = runCatching { c.applicationInfo.loadLabel(c.packageManager).toString() }.getOrDefault("this app")
