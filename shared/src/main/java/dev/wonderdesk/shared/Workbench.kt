@@ -1,6 +1,7 @@
 package dev.wonderdesk.shared
 
 import android.content.ClipData
+import android.graphics.drawable.BitmapDrawable
 import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Context
@@ -20,10 +21,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -161,14 +163,10 @@ fun AppFrame(app: AppInfo, transparentBackground: Boolean = false, content: @Com
           Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
             CompositionLocalProvider(LocalContentColor provides if (look == WonderLook.BLISS || look == WonderLook.SUPER) Color.White else MaterialTheme.colorScheme.onSurface) {
                 Row(Modifier.fillMaxWidth().aquaBrushedMetal(dark).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    val brand = when (look) {
-                        WonderLook.AQUA -> R.drawable.aqua_brand
-                        WonderLook.SUPER -> R.drawable.super_brand
-                        else -> null
-                    }
-                    if (brand != null) Image(
-                        painterResource(brand), null,
-                        Modifier.size(width = 46.dp, height = 26.dp).align(Alignment.CenterVertically)
+                    val appIcon = remember { runCatching { context.packageManager.getApplicationIcon(context.packageName).toBitmap(64, 64) }.getOrNull() }
+                    if (appIcon != null) Image(
+                        appIcon.asImageBitmap(), "App icon",
+                        Modifier.size(26.dp).align(Alignment.CenterVertically)
                     )
                     Column(Modifier.weight(1f)) {
                         Text(app.title, style = MaterialTheme.typography.headlineSmall)

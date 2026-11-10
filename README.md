@@ -1,6 +1,6 @@
 # Packrat for Android
 
-Creates, inspects and extracts ZIP archives. By Rednave.
+Creates, inspects and extracts ZIP archives.
 
 ## Easiest install and updates
 
