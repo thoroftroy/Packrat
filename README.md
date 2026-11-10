@@ -1,21 +1,25 @@
-# Packrat for Android
+# Packrat
 
-Creates, inspects and extracts ZIP archives.
+Open, create and extract archives.
 
-## Easiest install and updates
+## What it does
 
-Get App Hub once from https://github.com/thoroftroy/App-Hub/releases, then use it to install and update this app and the rest of the suite. You will not need to download APKs by hand.
-## Install
+- Opens ZIP, JAR, APK, TAR, TAR.GZ and GZ files. Tap an archive in Wayfinder or any app to browse it here like a folder.
+- Preview files without extracting, extract everything or just what you select to a folder you choose, then jump to it in Wayfinder.
+- Test an archive for damage, and see its size, compression and largest file.
+- Create ZIPs from files or whole folders, with a compression level.
+- Extraction blocks unsafe paths and stops at 50,000 entries or 8 GB.
 
-Install the APK, then open the app. Your phone may ask you to allow unknown sources first. Needs Android 10 or newer.
-## Using Packrat
+## Install and update
 
-- Open a ZIP to see a checked contents list with counts and total size. Filter or sort it.
-- Select files to pack them into a new ZIP, which is checked after writing.
-- Extract into a new folder. Existing files are never overwritten.
+The easiest way is Wonderdesk Apphub: get it once from https://github.com/thoroftroy/App-Hub/releases, then install and update this app and the rest of the suite from there.
 
-ZIP only. No encrypted archives, TAR, 7z or RAR. Caps are 2,000 entries and 256 MB total.
+Or download the APK from this repository's Releases, open it, and allow installing from that source if your phone asks. Needs Android 10 or newer.
 
 ## Look and feel
 
-Open About in the app to change the theme or motion. Aqua is the default.
+Every Wonderdesk app follows the look you pick in Control Room (Aqua, Bliss, Dark Bliss or Super). You can give this app its own look in its Settings.
+
+## Privacy
+
+Everything stays on your phone. No accounts, ads or tracking.

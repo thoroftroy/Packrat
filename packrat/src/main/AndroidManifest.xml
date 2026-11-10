@@ -1,6 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:label="Packrat"><activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="true">
-        <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
-        <intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="application/zip" android:scheme="content" /></intent-filter>
-    </activity></application>
+    <application android:label="Packrat">
+        <activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="true" android:launchMode="singleTask">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" /><data android:scheme="file" />
+                <data android:mimeType="application/zip" /><data android:mimeType="application/x-zip-compressed" /><data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/x-tar" /><data android:mimeType="application/gzip" /><data android:mimeType="application/x-gzip" /><data android:mimeType="application/x-compressed-tar" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" /><data android:mimeType="application/x-tar" /><data android:mimeType="application/gzip" />
+            </intent-filter>
+        </activity>
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+    <queries><package android:name="dev.wonderdesk.wayfinder" /></queries>
 </manifest>

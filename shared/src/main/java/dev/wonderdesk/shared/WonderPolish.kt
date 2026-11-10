@@ -112,11 +112,11 @@ fun ColumnScope.AboutBody(app: AppInfo, version: String) {
     Text(app.description)
     Text(app.limits)
     Text(
-        "Local-first. No analytics or automatic upload. App-specific artwork is still TEMP where not supplied by the owner.",
+        "Local-first. No analytics or automatic upload.",
         style = MaterialTheme.typography.bodySmall
     )
     Text(
-        "Wonderdesk by Rednave. Own source may be used and distributed without credit. Third-party components retain their licenses.",
+        "Third-party components retain their own licenses.",
         style = MaterialTheme.typography.bodySmall
     )
     Text("Appearance (this app)", style = MaterialTheme.typography.titleSmall)

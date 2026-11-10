@@ -1,4 +1,4 @@
-Wonderdesk by Rednave
+Wonderdesk
 Wonderdesk's own source is licensed under the repository LICENSE. That permission
 does not replace licenses or attribution requirements of third-party components.
 

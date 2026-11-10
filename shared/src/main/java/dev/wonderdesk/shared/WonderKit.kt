@@ -1,0 +1,816 @@
+package dev.wonderdesk.shared
+
+import android.app.Activity
+import android.content.Context
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.delay
+
+/* ------------------------------------------------------------------------------------------
+ * WonderKit: the shared app chrome and controls for every Wonderdesk app.
+ * Aqua follows Mac OS X Snow Leopard (unified toolbar, grouped white panels, pill search,
+ * blue gel default button). Bliss follows Windows XP Luna, Dark Bliss is its night variant,
+ * Super is the neon look. Every control asks [wonderPalette] for its colours.
+ * ---------------------------------------------------------------------------------------- */
+
+@Immutable
+data class WonderPalette(
+    val look: WonderLook,
+    val toolbar: List<Color>,
+    val toolbarLine: Color,
+    val toolbarText: Color,
+    val toolbarIcon: Color,
+    val window: Color,
+    val panel: Color,
+    val panelBorder: Color,
+    val separator: Color,
+    val text: Color,
+    val secondaryText: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val selection: Color,
+    val field: Color,
+    val fieldBorder: Color,
+    val danger: Color,
+    val success: Color,
+    val warning: Color,
+    val tabBar: List<Color>,
+    val tabSelected: Color,
+    val tabIdle: Color,
+    val panelRadius: Dp,
+    val dark: Boolean,
+)
+
+@Composable
+fun wonderPalette(): WonderPalette = paletteFor(LocalLook.current)
+
+fun paletteFor(look: WonderLook): WonderPalette = when (look) {
+    WonderLook.AQUA -> WonderPalette(
+        look, listOf(Color(0xFFEDEDED), Color(0xFFD9D9D9), Color(0xFFC2C2C2)), Color(0xFF8C8C8C),
+        Color(0xFF1C1C1C), Color(0xFF3C3C3C), Color(0xFFE4E6EA), Color.White, Color(0xFFBFC3C8), Color(0xFFE3E5E8),
+        Color(0xFF1B1D21), Color(0xFF6B7078), Color(0xFF1E7FE8), Color.White, Color(0xFF3875D7),
+        Color.White, Color(0xFF9DA3AB), Color(0xFFD7372F), Color(0xFF2E9E44), Color(0xFFE39A12),
+        listOf(Color(0xFFE9E9E9), Color(0xFFCFCFCF)), Color(0xFF1E7FE8), Color(0xFF5E636A), 10.dp, false
+    )
+    WonderLook.BLISS -> WonderPalette(
+        look, listOf(Color(0xFF0A5FEA), Color(0xFF2B7CF5), Color(0xFF0054E3)), Color(0xFF003C9E),
+        Color.White, Color.White, Color(0xFFECE9D8), Color.White, Color(0xFF7F9DB9), Color(0xFFE5E2D3),
+        Color(0xFF000000), Color(0xFF5A5A5A), Color(0xFF0058E6), Color.White, Color(0xFF316AC5),
+        Color.White, Color(0xFF7F9DB9), Color(0xFFC1311F), Color(0xFF3C9C3C), Color(0xFFD08A00),
+        listOf(Color(0xFFF7F5EC), Color(0xFFE3DFCB)), Color(0xFF0058E6), Color(0xFF4A4A4A), 4.dp, false
+    )
+    WonderLook.DARK -> WonderPalette(
+        look, listOf(Color(0xFF454B54), Color(0xFF353A41), Color(0xFF2A2E34)), Color(0xFF15171A),
+        Color(0xFFEDEFF2), Color(0xFFD5DAE0), Color(0xFF1C1F23), Color(0xFF292D33), Color(0xFF3B4048), Color(0xFF353A41),
+        Color(0xFFEDEFF2), Color(0xFF9AA2AD), Color(0xFF6EA8FF), Color(0xFF0B1A2E), Color(0xFF3D6FC4),
+        Color(0xFF1F2227), Color(0xFF4A5059), Color(0xFFFF6B61), Color(0xFF5BC777), Color(0xFFF2B33D),
+        listOf(Color(0xFF33373E), Color(0xFF24272C)), Color(0xFF6EA8FF), Color(0xFF8F98A3), 8.dp, true
+    )
+    WonderLook.SUPER -> WonderPalette(
+        look, listOf(Color(0xFF2A1A55), Color(0xFF3B1F7A), Color(0xFF1B1238)), Color(0xFFFF2E9A),
+        Color(0xFFF2ECFF), Color(0xFF7DF9FF), Color(0xFF0D0A1A), Color(0xFF1A1230), Color(0xFF3B2A6E), Color(0xFF2A1E4D),
+        Color(0xFFF2ECFF), Color(0xFFB4A8D6), Color(0xFF00F0FF), Color(0xFF07131A), Color(0xFFB01EFF),
+        Color(0xFF140E28), Color(0xFF5B3FA8), Color(0xFFFF4F7B), Color(0xFF3CFFA8), Color(0xFFFFCE68),
+        listOf(Color(0xFF21163F), Color(0xFF120C26)), Color(0xFF00F0FF), Color(0xFF9C8FC4), 16.dp, true
+    )
+}
+
+/* ---------------------------------- activity + scaffold ---------------------------------- */
+
+/** Base activity: edge-to-edge drawing, light/dark bar icons are handled by [WonderTheme]. */
+abstract class WonderActivity : ComponentActivity() {
+    open val secure: Boolean = false
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+        )
+        super.onCreate(savedInstanceState)
+        if (secure) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        setContent { Content() }
+    }
+
+    @Composable abstract fun Content()
+}
+
+data class WonderTab(val key: String, val label: String, val icon: ImageVector)
+data class WonderMenuItem(val label: String, val icon: ImageVector? = null, val danger: Boolean = false, val onClick: () -> Unit)
+
+/** Shows a short message above the tab bar. Replaces permanent status text. */
+val LocalToast = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+/** Opens the built-in Settings & About page. */
+val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> { {} }
+
+class ToastState {
+    var message by mutableStateOf<String?>(null)
+    var serial by mutableIntStateOf(0)
+    fun show(text: String) { message = text; serial++ }
+}
+
+/**
+ * The window every app lives in.
+ *
+ * @param tabs bottom tab bar entries; empty hides the bar.
+ * @param title toolbar title; defaults to the app name.
+ * @param onBack shows a back arrow in the toolbar and handles the system back gesture.
+ * @param actions toolbar buttons on the right (use [ToolbarButton]).
+ * @param menu extra overflow-menu entries placed above Settings and About.
+ * @param settings extra sections shown on the Settings page above Appearance.
+ */
+@Composable
+fun WonderApp(
+    appName: String,
+    about: String,
+    tabs: List<WonderTab> = emptyList(),
+    selectedTab: String = tabs.firstOrNull()?.key ?: "",
+    onTab: (String) -> Unit = {},
+    title: String = appName,
+    subtitle: String? = null,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    menu: List<WonderMenuItem> = emptyList(),
+    settings: (@Composable ColumnScope.() -> Unit)? = null,
+    showChrome: Boolean = true,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    WonderKitTheme {
+        val p = wonderPalette()
+        val look = LocalLook.current
+        val motion = LocalMotion.current
+        val density = LocalDensity.current.density
+        val fx = remember { WonderMotionField() }
+        val toast = remember { ToastState() }
+        var settingsOpen by rememberSaveable { mutableStateOf(false) }
+        BackHandler(enabled = settingsOpen) { settingsOpen = false }
+        if (onBack != null) BackHandler(enabled = !settingsOpen) { onBack() }
+        CompositionLocalProvider(
+            LocalToast provides toast::show,
+            LocalOpenSettings provides { settingsOpen = true },
+            LocalContentColor provides p.text,
+        ) {
+            Box(
+                Modifier.fillMaxSize()
+                    .wonderFx(fx, motion != WonderMotion.OFF, look, motion == WonderMotion.FULL, density)
+                    .background(p.window)
+            ) {
+                WonderBackdrop(look, motion, false)
+                if (settingsOpen) {
+                    Column(Modifier.fillMaxSize()) {
+                        WonderToolbar("Settings", null, onBack = { settingsOpen = false }, appIcon = false) {}
+                        SettingsPage(appName, about, settings)
+                    }
+                } else Column(Modifier.fillMaxSize()) {
+                    if (showChrome) WonderToolbar(title, subtitle, onBack, appIcon = onBack == null) {
+                        actions()
+                        OverflowMenu(menu + listOf(WonderMenuItem("Settings", WonderIcons.Settings) { settingsOpen = true }))
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth().then(if (tabs.isEmpty() || !showChrome) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
+                        content()
+                        ToastHost(toast, Modifier.align(Alignment.BottomCenter))
+                    }
+                    if (tabs.isNotEmpty() && showChrome) WonderTabBar(tabs, selectedTab, onTab)
+                }
+                WonderFxOverlay(fx)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToastHost(state: ToastState, modifier: Modifier) {
+    val p = wonderPalette()
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(state.serial) {
+        if (state.message != null) { visible = true; delay(2800); visible = false }
+    }
+    AnimatedVisibility(visible, modifier.padding(16.dp), enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut() + slideOutVertically { it / 2 }) {
+        val bg = if (p.dark) Color(0xF0E9ECF0) else Color(0xEE2A2D33)
+        Text(
+            state.message ?: "", color = if (p.dark) Color(0xFF15181C) else Color.White,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.shadow(8.dp, RoundedCornerShape(22.dp)).background(bg, RoundedCornerShape(22.dp)).padding(horizontal = 18.dp, vertical = 11.dp)
+        )
+    }
+}
+
+@Composable
+fun WonderToolbar(title: String, subtitle: String?, onBack: (() -> Unit)?, appIcon: Boolean, actions: @Composable RowScope.() -> Unit) {
+    val p = wonderPalette()
+    val context = LocalContext.current
+    val icon = remember { context.appArt(96) }
+    Column(
+        Modifier.fillMaxWidth().drawBehind {
+            drawRect(Brush.verticalGradient(p.toolbar))
+            drawLine(Color.White.copy(alpha = if (p.dark) .10f else .6f), Offset(0f, 0f), Offset(size.width, 0f), 1f)
+            drawLine(p.toolbarLine, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 2f)
+        }.statusBarsPadding()
+    ) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (onBack != null) ToolbarButton(WonderIcons.ArrowBack, "Back", onBack)
+            else Spacer(Modifier.width(8.dp))
+            if (appIcon && icon != null) {
+                Image(icon, null, Modifier.size(30.dp))
+                Spacer(Modifier.width(10.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(title, color = p.toolbarText, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (subtitle != null) Text(subtitle, color = p.toolbarText.copy(alpha = .72f), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            CompositionLocalProvider(LocalContentColor provides p.toolbarIcon) { actions() }
+        }
+    }
+}
+
+@Composable
+fun ToolbarButton(icon: ImageVector, description: String, onClick: () -> Unit, enabled: Boolean = true, tint: Color? = null) {
+    val p = wonderPalette()
+    IconButton(onClick = onClick, enabled = enabled) {
+        Icon(icon, description, tint = (tint ?: p.toolbarIcon).copy(alpha = if (enabled) 1f else .35f))
+    }
+}
+
+@Composable
+fun OverflowMenu(items: List<WonderMenuItem>) {
+    var open by remember { mutableStateOf(false) }
+    val p = wonderPalette()
+    Box {
+        ToolbarButton(WonderIcons.MoreVert, "More options", { open = true })
+        DropdownMenu(open, { open = false }, modifier = Modifier.background(p.panel)) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item.label, color = if (item.danger) p.danger else p.text) },
+                    leadingIcon = item.icon?.let { { Icon(it, null, tint = if (item.danger) p.danger else p.secondaryText) } },
+                    onClick = { open = false; item.onClick() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Unit) {
+    val p = wonderPalette()
+    Row(
+        Modifier.fillMaxWidth().drawBehind {
+            drawRect(Brush.verticalGradient(p.tabBar))
+            drawLine(p.toolbarLine.copy(alpha = .8f), Offset(0f, 0f), Offset(size.width, 0f), 2f)
+        }.navigationBarsPadding().height(60.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        tabs.forEach { tab ->
+            val on = tab.key == selected
+            val color = if (on) p.tabSelected else p.tabIdle
+            Column(
+                Modifier.weight(1f).fillMaxHeight().padding(vertical = 5.dp, horizontal = 2.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .then(if (on) Modifier.background(p.tabSelected.copy(alpha = if (p.dark) .16f else .11f)) else Modifier)
+                    .clickable(role = Role.Tab) { onTab(tab.key) },
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+            ) {
+                Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
+                Text(tab.label, color = color, style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal), maxLines = 1)
+            }
+        }
+    }
+}
+
+/* -------------------------------------- settings page ------------------------------------- */
+
+@Composable
+private fun SettingsPage(appName: String, about: String, extra: (@Composable ColumnScope.() -> Unit)?) {
+    val context = LocalContext.current
+    val p = wonderPalette()
+    val setLook = LocalLookPreference.current
+    val look = LocalLook.current
+    val setMotion = LocalMotionPreference.current
+    val motion = LocalMotion.current
+    var licenses by remember { mutableStateOf(false) }
+    val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?" }
+    val icon = remember { context.appArt(192) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        extra?.invoke(this)
+        val follows = LocalFollowsSuite.current
+        val setFollow = LocalFollowSuitePreference.current
+        val suiteInstalled = remember { GlobalAppearance.read(context) != null }
+        Panel(title = "Appearance", footer = if (suiteInstalled) "Control Room sets one look for every Wonderdesk app. Pick a look below to give just this app its own." else "Install Control Room to set one look for every Wonderdesk app.") {
+            if (suiteInstalled) {
+                SwitchRow("Follow Control Room", follows, setFollow, subtitle = if (follows) "Using the suite-wide look" else "This app has its own look", icon = WonderIcons.Palette, tint = Color(0xFF8E44AD))
+                PanelDivider(0.dp)
+            }
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WonderLook.entries.forEach { option ->
+                    val pal = paletteFor(option)
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { setLook(option) }.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.fillMaxWidth().aspectRatio(.8f).clip(RoundedCornerShape(8.dp)).background(pal.window)
+                                .border(if (option == look) 3.dp else 1.dp, if (option == look) p.accent else p.panelBorder, RoundedCornerShape(8.dp))
+                        ) {
+                            Box(Modifier.fillMaxWidth().height(14.dp).background(Brush.verticalGradient(pal.toolbar)))
+                            Column(Modifier.padding(top = 20.dp, start = 6.dp, end = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(Modifier.fillMaxWidth().height(10.dp).background(pal.panel, RoundedCornerShape(3.dp)))
+                                Box(Modifier.fillMaxWidth(.6f).height(10.dp).background(pal.accent, RoundedCornerShape(5.dp)))
+                                Box(Modifier.fillMaxWidth().height(10.dp).background(pal.panel, RoundedCornerShape(3.dp)))
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(option.label, style = MaterialTheme.typography.labelMedium, color = if (option == look) p.accent else p.text, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+            PanelDivider(0.dp)
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Motion", style = MaterialTheme.typography.titleSmall)
+                Segmented(WonderMotion.entries.map { it.label }, WonderMotion.entries.indexOf(motion)) { setMotion(WonderMotion.entries[it]) }
+                Text("Reduced and Off turn off the animated background and tap effects. Android's own animation setting is always respected.",
+                    style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+            }
+        }
+        Panel(title = "About") {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) Image(icon, null, Modifier.size(64.dp))
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(appName, style = MaterialTheme.typography.titleLarge)
+                    Text("Version $version", style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+                    Text("Part of the Wonderdesk suite", style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+                }
+            }
+            PanelDivider(0.dp)
+            Text(about, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            PanelDivider(0.dp)
+            ListRow(
+                title = "Get updates with Wonderdesk Apphub", subtitle = "Installs and updates every Wonderdesk app",
+                icon = WonderIcons.SystemUpdate, tint = Color(0xFF2E9E44),
+                onClick = {
+                    val launch = context.packageManager.getLaunchIntentForPackage("dev.wonderdesk.apphub")
+                    if (launch != null) context.launchSafely(launch) {} else context.launchSafely(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/thoroftroy/App-Hub/releases"))) {}
+                }
+            )
+            PanelDivider()
+            ListRow(title = "Open-source licenses", icon = WonderIcons.Description, tint = Color(0xFF7A7F87), onClick = { licenses = true })
+        }
+        Text("Wonderdesk keeps your data on this device. No accounts, ads or tracking.", Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodySmall, color = p.secondaryText, textAlign = TextAlign.Center)
+    }
+    if (licenses) WonderDialog(onDismissRequest = { licenses = false }, title = { Text("Open-source licenses") }, text = {
+        val text = remember { listOf("NOTICE.txt", "APACHE-2.0.txt").joinToString("\n\n") { name -> runCatching { context.assets.open("licenses/$name").bufferedReader().use { it.readText() } }.getOrDefault("") } }
+        Text(text, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall)
+    }, confirmButton = { TextButton(onClick = { licenses = false }) { Text("Close") } })
+}
+
+/* ---------------------------------------- panels ------------------------------------------ */
+
+/** A grouped white panel, like a Snow Leopard preference group. */
+@Composable
+fun Panel(modifier: Modifier = Modifier, title: String? = null, footer: String? = null, trailing: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val p = wonderPalette()
+    Column(modifier.fillMaxWidth()) {
+        if (title != null || trailing != null) Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(title ?: "", Modifier.weight(1f))
+            trailing?.invoke()
+        }
+        val shape = RoundedCornerShape(p.panelRadius)
+        Column(
+            Modifier.fillMaxWidth().shadow(if (p.dark) 0.dp else 1.dp, shape).clip(shape).background(p.panel).border(1.dp, p.panelBorder, shape),
+            content = content
+        )
+        if (footer != null) Text(footer, Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp), style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+    }
+}
+
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    val p = wonderPalette()
+    Text(
+        if (p.look == WonderLook.AQUA || p.look == WonderLook.DARK) text.uppercase() else text, modifier,
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = if (p.look == WonderLook.AQUA || p.look == WonderLook.DARK) .8.sp else 0.sp),
+        color = if (p.look == WonderLook.BLISS) Color(0xFF215DC6) else p.secondaryText
+    )
+}
+
+@Composable
+fun PanelDivider(inset: Dp = 56.dp) {
+    val p = wonderPalette()
+    Box(Modifier.padding(start = inset).fillMaxWidth().height(1.dp).background(p.separator))
+}
+
+/** Background for item [index] of [count] inside a LazyColumn so the items read as one panel. */
+@Composable
+fun Modifier.panelItem(index: Int, count: Int): Modifier {
+    val p = wonderPalette()
+    val r = p.panelRadius
+    val shape = RoundedCornerShape(
+        topStart = if (index == 0) r else 0.dp, topEnd = if (index == 0) r else 0.dp,
+        bottomStart = if (index == count - 1) r else 0.dp, bottomEnd = if (index == count - 1) r else 0.dp
+    )
+    return this.fillMaxWidth().clip(shape).background(p.panel).drawBehind {
+        val w = 1.dp.toPx()
+        val c = p.panelBorder
+        val rr = r.toPx()
+        // side borders
+        drawLine(c, Offset(w / 2, if (index == 0) rr else 0f), Offset(w / 2, size.height - if (index == count - 1) rr else 0f), w)
+        drawLine(c, Offset(size.width - w / 2, if (index == 0) rr else 0f), Offset(size.width - w / 2, size.height - if (index == count - 1) rr else 0f), w)
+        if (index == 0) {
+            drawLine(c, Offset(rr, w / 2), Offset(size.width - rr, w / 2), w)
+            drawArc(c, 180f, 90f, false, Offset(w / 2, w / 2), Size(rr * 2, rr * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            drawArc(c, 270f, 90f, false, Offset(size.width - rr * 2 - w / 2, w / 2), Size(rr * 2, rr * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+        } else drawLine(p.separator, Offset(56.dp.toPx(), 0f), Offset(size.width, 0f), w)
+        if (index == count - 1) {
+            drawLine(c, Offset(rr, size.height - w / 2), Offset(size.width - rr, size.height - w / 2), w)
+            drawArc(c, 90f, 90f, false, Offset(w / 2, size.height - rr * 2 - w / 2), Size(rr * 2, rr * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            drawArc(c, 0f, 90f, false, Offset(size.width - rr * 2 - w / 2, size.height - rr * 2 - w / 2), Size(rr * 2, rr * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+        }
+    }
+}
+
+/** Glossy rounded-square glyph tile, like Snow Leopard's preference icons. */
+@Composable
+fun IconTile(icon: ImageVector, tint: Color, size: Dp = 32.dp) {
+    val shape = RoundedCornerShape(size * .24f)
+    Box(
+        Modifier.size(size).clip(shape).background(Brush.verticalGradient(listOf(tint.lighten(.28f), tint, tint.darken(.18f))))
+            .drawBehind {
+                drawRoundRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = .45f), Color.White.copy(alpha = .05f)), endY = size.toPx() * .5f),
+                    size = Size(this.size.width, this.size.height * .5f), cornerRadius = CornerRadius(size.toPx() * .24f))
+            },
+        contentAlignment = Alignment.Center
+    ) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(size * .62f)) }
+}
+
+fun Color.lighten(f: Float) = Color(red + (1 - red) * f, green + (1 - green) * f, blue + (1 - blue) * f, alpha)
+fun Color.darken(f: Float) = Color(red * (1 - f), green * (1 - f), blue * (1 - f), alpha)
+
+/** Standard list row. Put inside a [Panel] or give it [Modifier.panelItem] in a LazyColumn. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ListRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
+    tint: Color = Color(0xFF1E7FE8),
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    chevron: Boolean = false,
+    selected: Boolean = false,
+    danger: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    val p = wonderPalette()
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth()
+            .then(if (selected) Modifier.background(p.selection.copy(alpha = .16f)) else Modifier)
+            .then(if (onClick != null || onLongClick != null) Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier)
+            .heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        when {
+            leading != null -> { Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { leading() }; Spacer(Modifier.width(12.dp)) }
+            icon != null -> { IconTile(icon, if (danger) p.danger else tint); Spacer(Modifier.width(12.dp)) }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (danger) p.danger else p.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!subtitle.isNullOrEmpty()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = p.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (trailing != null) { Spacer(Modifier.width(8.dp)); trailing() }
+        if (chevron) Icon(WonderIcons.ChevronRight, null, tint = p.secondaryText.copy(alpha = .7f))
+    }
+}
+
+@Composable
+fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit, subtitle: String? = null, icon: ImageVector? = null, tint: Color = Color(0xFF1E7FE8)) {
+    val p = wonderPalette()
+    ListRow(title, subtitle = subtitle, icon = icon, tint = tint, onClick = { onChange(!checked) }, trailing = {
+        Switch(checked, onChange, colors = SwitchDefaults.colors(checkedTrackColor = if (p.look == WonderLook.AQUA) Color(0xFF34C759) else p.accent, checkedThumbColor = Color.White))
+    })
+}
+
+/* ---------------------------------------- controls ---------------------------------------- */
+
+enum class ButtonKind { Primary, Secondary, Danger, Plain }
+
+@Composable
+fun WButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, kind: ButtonKind = ButtonKind.Secondary, enabled: Boolean = true) {
+    val p = wonderPalette()
+    val inner: @Composable RowScope.() -> Unit = {
+        if (icon != null) { Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
+        Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+    }
+    val pad = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+    when (kind) {
+        ButtonKind.Primary -> AquaButton(onClick, modifier, enabled, pad, inner)
+        ButtonKind.Secondary -> AquaSecondaryButton(onClick, modifier, enabled, pad, inner)
+        ButtonKind.Danger -> Button(onClick, modifier.heightIn(min = 48.dp), enabled, shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = p.danger, contentColor = Color.White), contentPadding = pad, content = inner)
+        ButtonKind.Plain -> TextButton(onClick, modifier, enabled, colors = ButtonDefaults.textButtonColors(contentColor = p.accent), content = inner)
+    }
+}
+
+/** Aqua segmented control. */
+@Composable
+fun Segmented(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
+    val p = wonderPalette()
+    val shape = RoundedCornerShape(if (p.look == WonderLook.BLISS) 3.dp else 9.dp)
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().height(38.dp).clip(shape)
+            .background(Brush.verticalGradient(if (p.dark) listOf(Color(0xFF3A3F47), Color(0xFF2B2F35)) else listOf(Color.White, Color(0xFFE6E8EB))))
+            .border(1.dp, p.fieldBorder, shape)
+    ) {
+        options.forEachIndexed { i, label ->
+            val on = i == selected
+            Box(
+                Modifier.weight(1f).fillMaxHeight()
+                    .then(if (on) Modifier.background(Brush.verticalGradient(listOf(p.accent.lighten(.25f), p.accent, p.accent.darken(.12f)))) else Modifier)
+                    .clickable(role = Role.Tab) { onSelect(i) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) p.onAccent else p.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (i < options.lastIndex) Box(Modifier.width(1.dp).fillMaxHeight().background(p.fieldBorder.copy(alpha = .7f)))
+        }
+    }
+}
+
+/** Snow Leopard pill search field. */
+@Composable
+fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, onSubmit: (() -> Unit)? = null) {
+    val p = wonderPalette()
+    val shape = RoundedCornerShape(50)
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().height(44.dp).clip(shape).background(p.field).border(1.dp, p.fieldBorder, shape).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(WonderIcons.Search, null, tint = p.secondaryText, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text(placeholder, color = p.secondaryText, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            BasicTextField(value, onChange, singleLine = true, textStyle = MaterialTheme.typography.bodyLarge.copy(color = p.text),
+                cursorBrush = SolidColor(p.accent), modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { onSubmit?.invoke() }))
+        }
+        if (value.isNotEmpty()) Box(Modifier.size(22.dp).clip(CircleShape).background(p.secondaryText.copy(alpha = .55f)).clickable { onChange("") }, contentAlignment = Alignment.Center) {
+            Icon(WonderIcons.Close, "Clear", tint = p.field, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+/** Text field styled for the current look. */
+@Composable
+fun Field(
+    value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier,
+    singleLine: Boolean = true, keyboard: KeyboardType = KeyboardType.Text, imeAction: ImeAction = ImeAction.Done,
+    onDone: (() -> Unit)? = null, isError: Boolean = false, supporting: String? = null,
+    visual: VisualTransformation = VisualTransformation.None, trailing: (@Composable () -> Unit)? = null,
+    minLines: Int = 1, textStyle: TextStyle? = null,
+) {
+    val p = wonderPalette()
+    OutlinedTextField(
+        value, onChange, modifier.fillMaxWidth(), label = { Text(label) }, singleLine = singleLine, isError = isError, minLines = minLines,
+        supportingText = supporting?.let { { Text(it) } }, visualTransformation = visual, trailingIcon = trailing,
+        textStyle = textStyle ?: MaterialTheme.typography.bodyLarge,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = imeAction),
+        keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }, onGo = { onDone?.invoke() }, onSearch = { onDone?.invoke() }),
+        shape = RoundedCornerShape(if (p.look == WonderLook.BLISS) 3.dp else 10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = p.field, unfocusedContainerColor = p.field, focusedBorderColor = p.accent, unfocusedBorderColor = p.fieldBorder,
+            focusedTextColor = p.text, unfocusedTextColor = p.text, focusedLabelColor = p.accent, unfocusedLabelColor = p.secondaryText, cursorColor = p.accent
+        )
+    )
+}
+
+@Composable
+fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
+    val p = wonderPalette()
+    val shape = RoundedCornerShape(50)
+    androidx.compose.foundation.layout.Row(
+        Modifier.height(34.dp).clip(shape)
+            .background(if (selected) p.accent else p.panel)
+            .border(1.dp, if (selected) p.accent else p.panelBorder, shape)
+            .clickable(onClick = onClick).padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = if (selected) p.onAccent else p.secondaryText); Spacer(Modifier.width(6.dp)) }
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) p.onAccent else p.text, maxLines = 1)
+    }
+}
+
+/** A friendly empty or first-run state with the app's illustration. */
+@Composable
+fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, icon: ImageVector? = null, art: Boolean = icon == null, action: (@Composable () -> Unit)? = null) {
+    val p = wonderPalette()
+    val context = LocalContext.current
+    val appArt = remember { if (art) context.appArt(288) else null }
+    Column(modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        when {
+            appArt != null -> Image(appArt, null, Modifier.size(112.dp))
+            icon != null -> Icon(icon, null, Modifier.size(72.dp), tint = p.secondaryText.copy(alpha = .55f))
+        }
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = p.secondaryText, textAlign = TextAlign.Center)
+        if (action != null) { Spacer(Modifier.height(6.dp)); action() }
+    }
+}
+
+/** Big number with a caption, for dashboards. */
+@Composable
+fun StatTile(label: String, value: String, modifier: Modifier = Modifier, icon: ImageVector? = null, tint: Color = Color(0xFF1E7FE8), detail: String? = null, progress: Float? = null) {
+    val p = wonderPalette()
+    val shape = RoundedCornerShape(p.panelRadius)
+    Column(modifier.clip(shape).background(p.panel).border(1.dp, p.panelBorder, shape).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) { IconTile(icon, tint, 24.dp); Spacer(Modifier.width(8.dp)) }
+            Text(label, style = MaterialTheme.typography.labelLarge, color = p.secondaryText, maxLines = 1)
+        }
+        Text(value, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = p.secondaryText, maxLines = 2)
+        if (progress != null) AquaProgress(progress, Modifier.fillMaxWidth().padding(top = 4.dp), tint)
+    }
+}
+
+/** Glossy capsule progress bar. Pass null for indeterminate. */
+@Composable
+fun AquaProgress(value: Float?, modifier: Modifier = Modifier, tint: Color? = null) {
+    val p = wonderPalette()
+    val c = tint ?: p.accent
+    if (value == null) {
+        LinearProgressIndicator(modifier.height(8.dp).clip(RoundedCornerShape(50)), color = c, trackColor = p.separator)
+        return
+    }
+    Box(modifier.height(10.dp).clip(RoundedCornerShape(50)).background(p.separator).border(1.dp, p.panelBorder.copy(alpha = .6f), RoundedCornerShape(50))) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth(value.coerceIn(0f, 1f)).clip(RoundedCornerShape(50))
+            .background(Brush.verticalGradient(listOf(c.lighten(.45f), c, c.darken(.1f)))))
+    }
+}
+
+@Composable
+fun ConfirmDialog(title: String, message: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit, danger: Boolean = false) {
+    val p = wonderPalette()
+    WonderDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Text(message) },
+        confirmButton = { TextButton(onClick = { onDismiss(); onConfirm() }) { Text(confirm, color = if (danger) p.danger else p.accent) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = p.text) } })
+}
+
+@Composable
+fun InputDialog(title: String, label: String, initial: String = "", confirm: String = "OK", onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var value by remember { mutableStateOf(initial) }
+    WonderDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = {
+        Field(value, { value = it }, label, onDone = { if (value.isNotBlank()) { onDismiss(); onConfirm(value.trim()) } })
+    }, confirmButton = { TextButton(enabled = value.isNotBlank(), onClick = { onDismiss(); onConfirm(value.trim()) }) { Text(confirm) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+/** Scrolling page body with standard padding and spacing. */
+@Composable
+fun Page(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+}
+
+fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var v = bytes / 1024.0; var i = 0
+    while (v >= 1024 && i < units.lastIndex) { v /= 1024; i++ }
+    return if (v >= 100) "%.0f %s".format(v, units[i]) else "%.1f %s".format(v, units[i])
+}
+
+fun Context.prefs(name: String) = getSharedPreferences(name, Context.MODE_PRIVATE)
+
+/** The app's full illustration (not the masked launcher icon), for toolbars and empty states. */
+fun Context.appArt(px: Int): ImageBitmap? {
+    val id = packageName.substringAfterLast('.')
+    val res = listOf("wonderdesk_${id}_icon", "wonderdesk_icon").map { resources.getIdentifier(it, "drawable", packageName) }.firstOrNull { it != 0 }
+    return runCatching {
+        if (res != null) androidx.core.content.ContextCompat.getDrawable(this, res)!!.toBitmap(px, px).asImageBitmap()
+        else packageManager.getApplicationIcon(packageName).toBitmap(px, px).asImageBitmap()
+    }.getOrNull()
+}
+
+/** "Just now", "5 minutes ago", "Yesterday", or a date. */
+fun relativeTime(ms: Long): String {
+    val diff = System.currentTimeMillis() - ms
+    if (diff in 0..59_000) return "Just now"
+    return android.text.format.DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString()
+}
+
+/* ------------------------------------- suite-wide appearance ------------------------------------ */
+
+/** Reads the look and motion chosen in Control Room. Null when Control Room isn't installed. */
+object GlobalAppearance {
+    val URI: android.net.Uri = android.net.Uri.parse("content://dev.wonderdesk.controlroom.appearance/current")
+    fun read(context: Context): Pair<WonderLook, WonderMotion>? = runCatching {
+        context.contentResolver.query(URI, null, null, null, null)?.use { c ->
+            if (!c.moveToFirst()) return@use null
+            val look = runCatching { WonderLook.valueOf(c.getString(c.getColumnIndexOrThrow("look"))) }.getOrDefault(WonderLook.AQUA)
+            val motion = runCatching { WonderMotion.valueOf(c.getString(c.getColumnIndexOrThrow("motion"))) }.getOrDefault(WonderMotion.FULL)
+            look to motion
+        }
+    }.getOrNull()
+}
+
+/** True while this app follows Control Room's appearance (the default). */
+val LocalFollowsSuite = staticCompositionLocalOf { true }
+val LocalFollowSuitePreference = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+
+/**
+ * Theme used by [WonderApp]. Follows Control Room unless the user picked a look for this app.
+ */
+@Composable
+fun WonderKitTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    val prefs = remember { context.getSharedPreferences("appearance", Context.MODE_PRIVATE) }
+    var follow by remember { mutableStateOf(prefs.getBoolean("follow_suite", true)) }
+    var ownLook by remember { mutableStateOf(runCatching { WonderLook.valueOf(prefs.getString("look", "AQUA") ?: "AQUA") }.getOrDefault(WonderLook.AQUA)) }
+    var ownMotion by remember { mutableStateOf(runCatching { WonderMotion.valueOf(prefs.getString("motion", "FULL") ?: "FULL") }.getOrDefault(WonderMotion.FULL)) }
+    var global by remember { mutableStateOf(GlobalAppearance.read(context)) }
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) global = GlobalAppearance.read(context) }
+        owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val look = if (follow && global != null) global!!.first else ownLook
+    val motion = if (follow && global != null) global!!.second else ownMotion
+    SideEffect {
+        (context as? Activity)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
+                isAppearanceLightStatusBars = !paletteFor(look).dark && look != WonderLook.BLISS
+                isAppearanceLightNavigationBars = !paletteFor(look).dark
+            }
+        }
+    }
+    val p = paletteFor(look)
+    val colors = if (p.dark) darkColorScheme(primary = p.accent, onPrimary = p.onAccent, secondary = p.accent, background = p.window, surface = p.panel, onSurface = p.text, onBackground = p.text, outline = p.panelBorder, surfaceVariant = p.window, onSurfaceVariant = p.secondaryText, error = p.danger)
+                 else lightColorScheme(primary = p.accent, onPrimary = p.onAccent, secondary = p.accent, background = p.window, surface = p.panel, onSurface = p.text, onBackground = p.text, outline = p.panelBorder, surfaceVariant = p.window, onSurfaceVariant = p.secondaryText, error = p.danger)
+    CompositionLocalProvider(
+        LocalLook provides look, LocalMotion provides motion, LocalIsDark provides p.dark,
+        LocalLookPreference provides { l -> ownLook = l; follow = false; prefs.edit().putString("look", l.name).putBoolean("follow_suite", false).apply() },
+        LocalMotionPreference provides { m -> ownMotion = m; follow = false; prefs.edit().putString("motion", m.name).putBoolean("follow_suite", false).apply() },
+        LocalFollowsSuite provides follow,
+        LocalFollowSuitePreference provides { f -> follow = f; prefs.edit().putBoolean("follow_suite", f).apply(); global = GlobalAppearance.read(context) },
+    ) {
+        MaterialTheme(colorScheme = colors, typography = wonderTypography(look)) {
+            CompositionLocalProvider(LocalContentColor provides p.text, content = content)
+        }
+    }
+}
