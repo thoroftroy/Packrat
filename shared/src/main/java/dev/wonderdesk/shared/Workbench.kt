@@ -229,9 +229,10 @@ fun Context.keepRead(uri: Uri) {
     runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
 }
 
-fun Context.displayName(uri: Uri): String = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-    if (it.moveToFirst()) it.getString(0) else null
-} ?: "Document"
+/** The file name behind [uri]; never throws (links from other apps can stop being readable). */
+fun Context.displayName(uri: Uri): String = runCatching {
+    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null }
+}.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "Document"
 
 fun Context.launchSafely(intent: Intent, report: (String) -> Unit) {
     try { startActivity(intent) } catch (e: Exception) { report("No compatible app, or Android blocked this action. ${e.localizedMessage ?: ""}") }

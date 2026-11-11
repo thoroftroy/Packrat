@@ -257,7 +257,7 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
                 }
             }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-                itemsIndexed(children, key = { _, e -> e.path }) { i, e ->
+                itemsIndexed(children, key = { j, e -> "${e.path}#$j" }) { i, e ->
                     val key = e.path.trimEnd('/')
                     val sel = key in selected
                     val (icon, tint) = when {

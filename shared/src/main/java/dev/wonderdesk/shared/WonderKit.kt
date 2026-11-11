@@ -219,18 +219,27 @@ fun WonderApp(
                         WonderToolbar("Settings", null, onBack = { settingsOpen = false }, appIcon = false) {}
                         SettingsPage(appName, about, settings)
                     }
-                } else Column(Modifier.fillMaxSize()) {
-                    if (showChrome) WonderToolbar(title, subtitle, onBack, appIcon = onBack == null) {
-                        actions()
-                        OverflowMenu(menu + listOf(WonderMenuItem("Settings", WonderIcons.Settings) { settingsOpen = true }))
+                } else {
+                    // Landscape on a phone: tabs move to a rail on the left so the content keeps its height.
+                    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+                    val rail = tabs.isNotEmpty() && showChrome && conf.screenWidthDp > conf.screenHeightDp && conf.screenHeightDp < 560
+                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
+                        if (showChrome) WonderToolbar(title, subtitle, onBack, appIcon = onBack == null) {
+                            actions()
+                            OverflowMenu(menu + listOf(WonderMenuItem("Settings", WonderIcons.Settings) { settingsOpen = true }))
+                        }
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            if (rail) WonderTabRail(tabs, selectedTab, onTab)
+                            Box(Modifier.weight(1f).fillMaxHeight().then(if (tabs.isEmpty() || !showChrome || rail) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
+                                content()
+                                ToastHost(toast, Modifier.align(Alignment.BottomCenter))
+                            }
+                        }
+                        if (tabs.isNotEmpty() && showChrome && !rail) WonderTabBar(tabs, selectedTab, onTab)
                     }
-                    Box(Modifier.weight(1f).fillMaxWidth().then(if (tabs.isEmpty() || !showChrome) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
-                        content()
-                        ToastHost(toast, Modifier.align(Alignment.BottomCenter))
-                    }
-                    if (tabs.isNotEmpty() && showChrome) WonderTabBar(tabs, selectedTab, onTab)
                 }
                 WonderFxOverlay(fx)
+                CrashPrompt(appName)
             }
         }
     }
@@ -332,6 +341,68 @@ fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Uni
                 Text(tab.label, color = color, style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal), maxLines = 1)
             }
         }
+    }
+}
+
+/** [WonderTabBar] standing on its side, for landscape. */
+@Composable
+fun WonderTabRail(tabs: List<WonderTab>, selected: String, onTab: (String) -> Unit) {
+    val p = wonderPalette()
+    Column(
+        Modifier.fillMaxHeight().width(84.dp).drawBehind {
+            drawRect(Brush.horizontalGradient(p.tabBar))
+            drawLine(p.toolbarLine.copy(alpha = .8f), Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), 2f)
+        }.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+    ) {
+        tabs.forEach { tab ->
+            val on = tab.key == selected
+            val color = if (on) p.tabSelected else p.tabIdle
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .then(if (on) Modifier.background(p.tabSelected.copy(alpha = if (p.dark) .16f else .11f)) else Modifier)
+                    .clickable(role = Role.Tab) { onTab(tab.key) }.padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
+                Text(tab.label, color = color, style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/**
+ * After an app crashed, the next time it opens it says sorry and offers to send the report (once per crash).
+ * Skipped when sending is already automatic, or when Control Room isn't there to keep the report.
+ */
+@Composable
+private fun CrashPrompt(appName: String) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("wondercrash", Context.MODE_PRIVATE) }
+    var pending by remember { mutableStateOf(prefs.getString("prompt", null)) }
+    var auto by remember { mutableStateOf<Boolean?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pending) {
+        if (pending == null) return@LaunchedEffect
+        auto = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { WonderCrash.status(context) }
+        if (auto != false) { prefs.edit().remove("prompt").apply(); pending = null }
+    }
+    if (pending != null && auto == false) {
+        fun done() { prefs.edit().remove("prompt").apply(); pending = null }
+        WonderDialog(onDismissRequest = { done() }, title = { Text("$appName closed unexpectedly") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Sorry about that. Sending the report helps get it fixed.", style = MaterialTheme.typography.bodyMedium)
+                Text("Only the error, the app version, your phone model and Android version are sent. File names, links and email addresses are removed. You can change this any time in Control Room › Wonderdesk.",
+                    style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
+            }
+        }, confirmButton = {
+            TextButton(onClick = { done(); scope.launch(kotlinx.coroutines.Dispatchers.IO) { WonderCrash.call(context, "auto", "on") } }) { Text("Always send") }
+        }, dismissButton = {
+            Row {
+                TextButton(onClick = { done() }) { Text("Not now") }
+                TextButton(onClick = { done(); scope.launch(kotlinx.coroutines.Dispatchers.IO) { WonderCrash.call(context, "send", context.packageName) } }) { Text("Send") }
+            }
+        })
     }
 }
 
@@ -662,14 +733,20 @@ fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, ic
     val p = wonderPalette()
     val context = LocalContext.current
     val appArt = remember { if (art) context.appArt(288) else null }
-    Column(modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        when {
-            appArt != null -> Image(appArt, null, Modifier.size(112.dp))
-            icon != null -> Icon(icon, null, Modifier.size(72.dp), tint = p.secondaryText.copy(alpha = .55f))
+    // Scrolls when there isn't room (landscape, big fonts), so nothing ever overlaps.
+    val short = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 560
+    // Inside a list it just takes its height; on its own it scrolls when there isn't room, so nothing overlaps.
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val scroll = if (constraints.hasBoundedHeight) Modifier.verticalScroll(rememberScrollState()) else Modifier
+        Column(Modifier.fillMaxWidth().then(scroll).padding(horizontal = 32.dp, vertical = if (short) 16.dp else 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            when {
+                appArt != null -> Image(appArt, null, Modifier.size(if (short) 72.dp else 112.dp))
+                icon != null -> Icon(icon, null, Modifier.size(72.dp), tint = p.secondaryText.copy(alpha = .55f))
+            }
+            Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = p.secondaryText, textAlign = TextAlign.Center)
+            if (action != null) { Spacer(Modifier.height(6.dp)); action() }
         }
-        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = p.secondaryText, textAlign = TextAlign.Center)
-        if (action != null) { Spacer(Modifier.height(6.dp)); action() }
     }
 }
 
@@ -1018,3 +1095,73 @@ fun AccessGuide(kind: SpecialAccess.Kind, why: String, onDismiss: () -> Unit, co
 }
 
 fun appLabel(c: Context): String = runCatching { c.applicationInfo.loadLabel(c.packageManager).toString() }.getOrDefault("this app")
+
+/* ------------------------------------------- widgets ------------------------------------------- */
+
+/** One home-screen widget's own settings, kept by its widget id. */
+class WidgetPrefs(c: Context, private val id: Int) {
+    private val p = c.getSharedPreferences("widget-settings", Context.MODE_PRIVATE)
+    fun str(name: String, def: String) = p.getString("$id.$name", def) ?: def
+    fun bool(name: String, def: Boolean) = p.getBoolean("$id.$name", def)
+    fun int(name: String, def: Int) = p.getInt("$id.$name", def)
+    fun put(vararg pairs: Pair<String, Any>) = p.edit().apply { pairs.forEach { (k, v) -> when (v) { is Boolean -> putBoolean("$id.$k", v); is Int -> putInt("$id.$k", v); else -> putString("$id.$k", v.toString()) } } }.apply()
+    fun clear() = p.edit().apply { p.all.keys.filter { it.startsWith("$id.") }.forEach { remove(it) } }.apply()
+}
+
+/** How a widget sits on the wallpaper. */
+enum class WidgetLook(val label: String) { GLASS("Light glass"), DARK("Dark glass"), CLEAR("No background") }
+
+/**
+ * Applies [look] to a widget: background drawable plus text colours (light text on dark glass and on no background).
+ * Each app supplies its three backgrounds and lists its main and secondary text views.
+ */
+fun android.widget.RemoteViews.applyLook(look: WidgetLook, root: Int, bgs: Triple<Int, Int, Int>, primary: List<Int>, secondary: List<Int>) {
+    setInt(root, "setBackgroundResource", when (look) { WidgetLook.GLASS -> bgs.first; WidgetLook.DARK -> bgs.second; WidgetLook.CLEAR -> bgs.third })
+    val light = look != WidgetLook.GLASS
+    primary.forEach { setTextColor(it, if (light) 0xFFFFFFFF.toInt() else 0xFF1B1D21.toInt()) }
+    secondary.forEach { setTextColor(it, if (light) 0xDDFFFFFF.toInt() else 0xFF6B7078.toInt()) }
+    if (look == WidgetLook.CLEAR) (primary + secondary).forEach { runCatching { setFloat(it, "setShadowLayerRadius", 6f) } }
+}
+
+/**
+ * Base for a widget's setup screen. Opens when the widget is added (and from the launcher's Edit), saves,
+ * redraws the widget and closes. Backing out of the first setup cancels adding the widget.
+ */
+abstract class WidgetSetupActivity : WonderActivity() {
+    protected var widgetId = android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+    override fun onCreate(savedInstanceState: Bundle?) {
+        widgetId = intent?.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) ?: android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+        setResult(RESULT_CANCELED, android.content.Intent().putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
+        super.onCreate(savedInstanceState)
+        if (widgetId == android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) finish()
+    }
+    /** Redraw the widget with its new settings. */
+    abstract fun redraw()
+    fun save() {
+        runCatching { redraw() }
+        setResult(RESULT_OK, android.content.Intent().putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)); finish()
+    }
+}
+
+/** The standard widget setup screen: a title, the options, and Save. */
+@Composable
+fun WidgetSetup(appName: String, title: String, onCancel: () -> Unit, onSave: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    WonderApp(appName = appName, about = title, title = title, onBack = onCancel,
+        actions = { TextButton(onClick = onSave) { Text("Save", color = wonderPalette().toolbarText, fontWeight = FontWeight.SemiBold) } }) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            content()
+            WButton("Save widget", onSave, Modifier.fillMaxWidth(), icon = WonderIcons.Check, kind = ButtonKind.Primary)
+        }
+    }
+}
+
+/** Background picker row used by every widget setup screen. */
+@Composable
+fun WidgetLookPicker(look: WidgetLook, onChange: (WidgetLook) -> Unit) {
+    Panel(title = "Background") {
+        WidgetLook.values().forEachIndexed { i, l ->
+            if (i > 0) PanelDivider()
+            ListRow(l.label, trailing = { RadioButton(look == l, { onChange(l) }) }, onClick = { onChange(l) })
+        }
+    }
+}

@@ -41,6 +41,7 @@ object WonderCrash {
             runCatching {
                 val r = record(c, "crash", e.javaClass.name + ": " + (e.message ?: ""), "Thread: ${t.name}\n" + e.stackTraceToString())
                 File(dir(c), "${r.optLong("time")}.json").writeText(r.toString())
+                c.getSharedPreferences("wondercrash", Context.MODE_PRIVATE).edit().putString("prompt", r.optString("summary")).commit()
                 send(c, r)
             }
             previous?.uncaughtException(t, e)
@@ -51,6 +52,10 @@ object WonderCrash {
         .put("pkg", c.packageName).put("kind", kind).put("time", System.currentTimeMillis()).put("summary", summary.take(400)).put("detail", detail.take(60_000))
         .put("version", runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrDefault("?"))
         .put("device", "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+
+    /** True when Control Room sends reports by itself, false when it asks first, null when it isn't installed. */
+    fun status(c: Context): Boolean? = call(c, "status", null)?.getBoolean("auto")
+    fun call(c: Context, method: String, arg: String?): android.os.Bundle? = runCatching { c.contentResolver.call(REPORT_URI, method, arg, null) }.getOrNull()
 
     private fun send(c: Context, r: JSONObject): Boolean = runCatching {
         c.contentResolver.insert(REPORT_URI, ContentValues().apply { put("json", r.toString()) }) != null
