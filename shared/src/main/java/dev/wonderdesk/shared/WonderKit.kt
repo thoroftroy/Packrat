@@ -738,19 +738,50 @@ fun formatBytes(bytes: Long): String {
 fun Context.prefs(name: String) = getSharedPreferences(name, Context.MODE_PRIVATE)
 
 /** The app's full illustration (not the masked launcher icon), for toolbars and empty states. */
-fun Context.appArt(px: Int): ImageBitmap? {
-    val id = packageName.substringAfterLast('.')
-    val res = listOf("wonderdesk_${id}_icon", "wonderdesk_icon").map { resources.getIdentifier(it, "drawable", packageName) }.firstOrNull { it != 0 }
-    return runCatching {
-        if (res != null) androidx.core.content.ContextCompat.getDrawable(this, res)!!.toBitmap(px, px).asImageBitmap()
-        else packageManager.getApplicationIcon(packageName).toBitmap(px, px).asImageBitmap()
-    }.getOrNull()
+fun Context.appArt(px: Int): ImageBitmap? = suiteArt(packageName, px)
+
+/**
+ * A Wonderdesk app's full artwork, cropped to its visible edges so it fills the space it's given.
+ * Falls back to the app's normal icon (and works for any installed app).
+ */
+fun Context.suiteArt(pkg: String, px: Int): ImageBitmap? = runCatching {
+    val res = if (pkg == packageName) resources else packageManager.getResourcesForApplication(pkg)
+    val id = listOf("wonderdesk_${pkg.substringAfterLast('.')}_icon", "wonderdesk_icon").map { res.getIdentifier(it, "drawable", pkg) }.firstOrNull { it != 0 }
+    if (id != null) {
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeResource(res, id, opts)
+        opts.inSampleSize = maxOf(1, minOf(opts.outWidth, opts.outHeight) / (px * 2)); opts.inJustDecodeBounds = false
+        val raw = android.graphics.BitmapFactory.decodeResource(res, id, opts)
+        fitSquare(trimTransparent(raw), px).asImageBitmap()
+    } else packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap()
+}.getOrNull()
+
+/** Crops fully transparent (or nearly) margins. */
+fun trimTransparent(b: android.graphics.Bitmap, threshold: Int = 40): android.graphics.Bitmap {
+    val w = b.width; val h = b.height
+    val row = IntArray(w)
+    var top = 0; var bottom = h - 1; var left = w; var right = -1
+    fun opaqueRow(y: Int): Boolean { b.getPixels(row, 0, w, 0, y, w, 1); return row.any { (it ushr 24) > threshold } }
+    while (top < h && !opaqueRow(top)) top++
+    while (bottom > top && !opaqueRow(bottom)) bottom--
+    if (top >= bottom) return b
+    for (y in top..bottom step 2) { b.getPixels(row, 0, w, 0, y, w, 1); for (x in 0 until w) if ((row[x] ushr 24) > threshold) { if (x < left) left = x; if (x > right) right = x } }
+    if (right <= left) return b
+    return android.graphics.Bitmap.createBitmap(b, left, top, right - left + 1, bottom - top + 1)
+}
+
+/** Centres [b] in a transparent square of [px], as large as fits. */
+fun fitSquare(b: android.graphics.Bitmap, px: Int): android.graphics.Bitmap {
+    val out = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+    val s = minOf(px.toFloat() / b.width, px.toFloat() / b.height); val w = b.width * s; val h = b.height * s
+    android.graphics.Canvas(out).drawBitmap(b, null, android.graphics.RectF((px - w) / 2, (px - h) / 2, (px + w) / 2, (px + h) / 2), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG))
+    return out
 }
 
 /** "Just now", "5 minutes ago", "Yesterday", or a date. */
 fun relativeTime(ms: Long): String {
     val diff = System.currentTimeMillis() - ms
-    if (diff in 0..59_000) return "Just now"
+    if (diff in -120_000..59_000) return "Just now"
     return android.text.format.DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString()
 }
 

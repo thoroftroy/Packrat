@@ -1,5 +1,11 @@
 # Packrat changelog
 
+## v0.4.0
+
+- Polish and stability fixes from the suite-wide test pass
+- If the app ever crashes or freezes, a report goes to Control Room so it can be shared and fixed
+- App icon art is larger and fills its tile without being cut off
+
 ## v0.3.1
 
 - App icon redrawn so nothing is cut off: round icons fill the space, the rest sit on an Aqua tile
