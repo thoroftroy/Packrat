@@ -146,6 +146,9 @@ abstract class WonderActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         if (secure) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        // Decode the app's artwork (toolbar, About) in the background so no screen waits for it.
+        val app = applicationContext
+        Thread { runCatching { app.appArt(96); app.appArt(192) } }.start()
         setContent { Content() }
     }
 
@@ -821,7 +824,37 @@ fun Context.appArt(px: Int): ImageBitmap? = suiteArt(packageName, px)
  * A Wonderdesk app's full artwork, cropped to its visible edges so it fills the space it's given.
  * Falls back to the app's normal icon (and works for any installed app).
  */
-fun Context.suiteArt(pkg: String, px: Int): ImageBitmap? = runCatching {
+fun Context.suiteArt(pkg: String, px: Int): ImageBitmap? {
+    val key = "$pkg@$px"
+    ArtCache.map.get(key)?.let { return it }
+    return suiteArtNow(pkg, px)?.also { ArtCache.map.put(key, it) }
+}
+
+/** Decoded artwork and icons, so screens and lists never decode the same picture twice. */
+object ArtCache { val map = android.util.LruCache<String, ImageBitmap>(96) }
+
+/** [suiteArt] without blocking: null for the first frame, then the picture (decoded off the main thread). */
+@Composable
+fun rememberSuiteArt(pkg: String, px: Int): ImageBitmap? {
+    val c = LocalContext.current
+    return produceState(ArtCache.map.get("$pkg@$px"), pkg, px) {
+        if (value == null) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.suiteArt(pkg, px) }
+    }.value
+}
+
+/** Any installed app's normal icon, decoded off the main thread and cached. */
+@Composable
+fun rememberAppIcon(pkg: String, px: Int): ImageBitmap? {
+    val c = LocalContext.current
+    val key = "icon:$pkg@$px"
+    return produceState(ArtCache.map.get(key), pkg, px) {
+        if (value == null) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { c.packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap() }.getOrNull()?.also { ArtCache.map.put(key, it) }
+        }
+    }.value
+}
+
+private fun Context.suiteArtNow(pkg: String, px: Int): ImageBitmap? = runCatching {
     val res = if (pkg == packageName) resources else packageManager.getResourcesForApplication(pkg)
     val id = listOf("wonderdesk_${pkg.substringAfterLast('.')}_icon", "wonderdesk_icon").map { res.getIdentifier(it, "drawable", pkg) }.firstOrNull { it != 0 }
     if (id != null) {
@@ -1138,7 +1171,7 @@ abstract class WidgetSetupActivity : WonderActivity() {
     /** Redraw the widget with its new settings. */
     abstract fun redraw()
     fun save() {
-        runCatching { redraw() }
+        Thread { runCatching { redraw() } }.start()
         setResult(RESULT_OK, android.content.Intent().putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)); finish()
     }
 }
