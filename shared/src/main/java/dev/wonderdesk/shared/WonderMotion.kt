@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -75,13 +76,14 @@ class WonderMotionField(seed: Long = 0xB1155L) {
                     rings.add(Ring(x, y, color = neon[(random() * neon.size).toInt()]))
                 }
                 if (rings.size > 12) rings.removeAll(rings.take(rings.size - 12))
-                repeat(if (full) 60 else 20) {
+                val sc = if (full) 1.4f else 0.7f   // dp (Bliss Player uses density × 1.4 in pixels)
+                repeat(if (full) 60 else 24) {
                     if (sparks.size >= 180) return@repeat
                     val angle = random() * 6.2831853f
-                    val speed = (65 + random() * 195) * density
+                    val speed = (65 + random() * 195) * sc
                     val duration = 0.5f + random() * 0.8f
                     sparks.add(Spark(x, y, cos(angle) * speed, sin(angle) * speed,
-                        (1.3f + random() * 2.8f) * density, duration, duration,
+                        (1.3f + random() * 2.8f) * sc, duration, duration,
                         neon[(random() * neon.size).toInt()], false))
                 }
             }
@@ -97,11 +99,11 @@ class WonderMotionField(seed: Long = 0xB1155L) {
                 repeat(8) {
                     if (sparks.size >= 180) return@repeat
                     val angle = random() * 6.2831853f
-                    val speed = (65 + random() * 195) * density * 0.55f
+                    val speed = (65 + random() * 195) * 0.55f
                     val duration = (0.5f + random() * 0.8f) * 0.55f
                     val pal = if (look.dark) retroDark else retroLight
                     sparks.add(Spark(x, y, cos(angle) * speed, sin(angle) * speed,
-                        (1.3f + random() * 2.8f) * density * 0.55f, duration, duration,
+                        (1.3f + random() * 2.8f) * 0.55f, duration, duration,
                         pal[(random() * pal.size).toInt()], false))
                 }
             }
@@ -185,20 +187,28 @@ fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() })
         }
         if (!active) return@BoxWithConstraints
         val retro = look != WonderLook.AQUA && look != WonderLook.SUPER
+        val superRainbow = look == WonderLook.SUPER && motion == WonderMotion.FULL
         Canvas(Modifier.fillMaxSize()) {
             if (tick == 0L) return@Canvas
+            if (ambient) {
+                // Bliss Player's aurora: three faint rainbow glows drifting behind everything.
+                val t = field.elapsed; val r = max(size.width, size.height) * .5f
+                for (i in 0 until 3) {
+                    val cx = size.width * (.5f + .44f * sin(t * 1.9f + i * 2.094f)); val cy = size.height * (.5f + .44f * cos(t * 1.4f + i * 1.7f + 1f))
+                    val hue = ((t * 95f + i * 120f) % 360f + 360f) % 360f
+                    drawCircle(Brush.radialGradient(listOf(Color.hsv(hue, .85f, 1f, 30f / 255f), Color.Transparent), Offset(cx, cy), r), r, Offset(cx, cy))
+                }
+            }
             for (ring in field.rings) {
                 val fraction = (ring.age / 1.1f).coerceIn(0f, 1f)
                 val spread = if (retro) 34f else if (motion != WonderMotion.FULL) 38f else 100f
                 val scale = density
                 val radius = (9f + fraction * spread) * scale
                 val alpha = ((1f - fraction) * if (look == WonderLook.AQUA) 130 else 200).toInt()
-                drawCircle(
-                    color = if (look == WonderLook.AQUA) Color(238, 254, 255, alpha)
-                            else Color(ring.color).copy(alpha = alpha / 255f),
-                    radius = radius, center = Offset(ring.x * scale, ring.y * scale),
-                    style = Stroke(width = (2.5f - fraction * 2f) * scale)
-                )
+                val rc = if (look == WonderLook.AQUA) Color(238, 254, 255, alpha) else rainbow(ring.color, alpha, ring.x, ring.y, field.elapsed, superRainbow)
+                val at = Offset(ring.x * scale, ring.y * scale)
+                drawCircle(color = rc, radius = radius, center = at, style = Stroke(width = (2.5f - fraction * 2f) * scale))
+                drawCircle(color = rc.copy(alpha = rc.alpha / 2f), radius = radius * .76f, center = at, style = Stroke(width = .7f * scale))
             }
             for (p in field.sparks) {
                 if (look == WonderLook.AQUA) continue
@@ -213,12 +223,25 @@ fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() })
                     drawRect(c, topLeft = Offset(p.x * density - sq, p.y * density - sq), size = Size(sq * 2, sq * 2))
                     continue
                 }
+                // Super, drawn the way Bliss Player does it: a soft glow that fades to nothing, a streak along the
+                // spark's path, a bright core, and colours that drift through the rainbow.
                 val alpha = ((if (p.ambient) .38f + sin(fraction * 5f) * .15f else fraction) * 230).toInt().coerceIn(0, 255)
-                val c = Color(p.color).copy(alpha = alpha / 255f)
-                drawCircle(c, radius = max(1f, p.radius * if (p.ambient) 3f else 5f) * density, center = Offset(p.x * density, p.y * density))
+                val c = rainbow(p.color, alpha, p.x, p.y, field.elapsed, superRainbow)
+                val centre = Offset(p.x * density, p.y * density)
+                val glow = max(1f, p.radius * (if (p.ambient) 3f else 5f) * density)
+                drawCircle(Brush.radialGradient(listOf(c, Color.Transparent), centre, glow), glow, centre)
+                if (!p.ambient) drawLine(c, Offset(p.previousX * density, p.previousY * density), centre, strokeWidth = max(.6f * density, p.radius * .45f * density))
+                drawCircle(c, max(.6f * density, p.radius * fraction * density), centre)
             }
         }
     }
+}
+
+/** Super's drifting rainbow (Bliss Player's formula); other looks keep their palette colour. */
+private fun rainbow(base: Int, alpha: Int, x: Float, y: Float, t: Float, on: Boolean): Color {
+    if (!on) return Color(base).copy(alpha = alpha / 255f)
+    val hue = ((t * 46f + x * 0.65f + y * 0.47f) % 360f + 360f) % 360f
+    return Color.hsv(hue, .85f, 1f, alpha / 255f)
 }
 
 /** Records taps into the motion field without consuming gestures. */

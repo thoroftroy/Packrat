@@ -42,12 +42,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.semantics.Role
@@ -218,7 +220,7 @@ fun WonderApp(
             ) {
                 WonderBackdrop(look, motion, false)
                 if (settingsOpen) {
-                    Column(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize().wonderEnter(motion, "settings")) {
                         WonderToolbar("Settings", null, onBack = { settingsOpen = false }, appIcon = false) {}
                         SettingsPage(appName, about, settings)
                     }
@@ -234,7 +236,8 @@ fun WonderApp(
                         Row(Modifier.weight(1f).fillMaxWidth()) {
                             if (rail) WonderTabRail(tabs, selectedTab, onTab)
                             Box(Modifier.weight(1f).fillMaxHeight().then(if (tabs.isEmpty() || !showChrome || rail) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
-                                content()
+                                // New screens and tabs ease in instead of snapping.
+                                Box(Modifier.fillMaxSize().wonderEnter(motion, selectedTab)) { content() }
                                 ToastHost(toast, Modifier.align(Alignment.BottomCenter))
                             }
                         }
@@ -323,6 +326,7 @@ fun OverflowMenu(items: List<WonderMenuItem>) {
 @Composable
 fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Unit) {
     val p = wonderPalette()
+    val view = LocalView.current
     Row(
         Modifier.fillMaxWidth().drawBehind {
             drawRect(Brush.verticalGradient(p.tabBar))
@@ -337,7 +341,7 @@ fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Uni
                 Modifier.weight(1f).fillMaxHeight().padding(vertical = 5.dp, horizontal = 2.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .then(if (on) Modifier.background(p.tabSelected.copy(alpha = if (p.dark) .16f else .11f)) else Modifier)
-                    .clickable(role = Role.Tab) { onTab(tab.key) },
+                    .clickable(role = Role.Tab) { if (tab.key != selected) view.tick(); onTab(tab.key) },
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
             ) {
                 Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
@@ -347,10 +351,24 @@ fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Uni
     }
 }
 
+/**
+ * A short, soft entrance (fade plus a small rise) that plays whenever [key] changes: a new screen,
+ * a new tab. Instant when motion is off, gentler when reduced.
+ */
+@Composable
+fun Modifier.wonderEnter(motion: WonderMotion, key: Any): Modifier {
+    if (motion == WonderMotion.OFF) return this
+    val p = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(key) { p.snapTo(0f); p.animateTo(1f, androidx.compose.animation.core.tween(if (motion == WonderMotion.FULL) 220 else 140, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+    val rise = with(LocalDensity.current) { (if (motion == WonderMotion.FULL) 14.dp else 6.dp).toPx() }
+    return this.then(Modifier.graphicsLayer { alpha = .35f + .65f * p.value; translationY = (1f - p.value) * rise })
+}
+
 /** [WonderTabBar] standing on its side, for landscape. */
 @Composable
 fun WonderTabRail(tabs: List<WonderTab>, selected: String, onTab: (String) -> Unit) {
     val p = wonderPalette()
+    val view = LocalView.current
     Column(
         Modifier.fillMaxHeight().width(84.dp).drawBehind {
             drawRect(Brush.horizontalGradient(p.tabBar))
@@ -364,7 +382,7 @@ fun WonderTabRail(tabs: List<WonderTab>, selected: String, onTab: (String) -> Un
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .then(if (on) Modifier.background(p.tabSelected.copy(alpha = if (p.dark) .16f else .11f)) else Modifier)
-                    .clickable(role = Role.Tab) { onTab(tab.key) }.padding(vertical = 8.dp),
+                    .clickable(role = Role.Tab) { if (tab.key != selected) view.tick(); onTab(tab.key) }.padding(vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
@@ -616,8 +634,9 @@ fun ListRow(
 @Composable
 fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit, subtitle: String? = null, icon: ImageVector? = null, tint: Color = Color(0xFF1E7FE8)) {
     val p = wonderPalette()
-    ListRow(title, subtitle = subtitle, icon = icon, tint = tint, onClick = { onChange(!checked) }, trailing = {
-        Switch(checked, onChange, colors = SwitchDefaults.colors(checkedTrackColor = if (p.look == WonderLook.AQUA) Color(0xFF34C759) else p.accent, checkedThumbColor = Color.White))
+    val view = LocalView.current
+    ListRow(title, subtitle = subtitle, icon = icon, tint = tint, onClick = { view.tick(); onChange(!checked) }, trailing = {
+        Switch(checked, { view.tick(); onChange(it) }, colors = SwitchDefaults.colors(checkedTrackColor = if (p.look == WonderLook.AQUA) Color(0xFF34C759) else p.accent, checkedThumbColor = Color.White))
     })
 }
 
@@ -627,6 +646,8 @@ enum class ButtonKind { Primary, Secondary, Danger, Plain }
 
 @Composable
 fun WButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, kind: ButtonKind = ButtonKind.Secondary, enabled: Boolean = true) {
+    val view = LocalView.current
+    val onClick: () -> Unit = { view.tick(); onClick() }
     val p = wonderPalette()
     val inner: @Composable RowScope.() -> Unit = {
         if (icon != null) { Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
@@ -717,12 +738,13 @@ fun Field(
 @Composable
 fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
     val p = wonderPalette()
+    val view = LocalView.current
     val shape = RoundedCornerShape(50)
     androidx.compose.foundation.layout.Row(
         Modifier.height(34.dp).clip(shape)
             .background(if (selected) p.accent else p.panel)
             .border(1.dp, if (selected) p.accent else p.panelBorder, shape)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp),
+            .clickable { view.tick(); onClick() }.padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = if (selected) p.onAccent else p.secondaryText); Spacer(Modifier.width(6.dp)) }
@@ -1198,3 +1220,19 @@ fun WidgetLookPicker(look: WidgetLook, onChange: (WidgetLook) -> Unit) {
         }
     }
 }
+
+/**
+ * A widget that fits any size you give it: Android shows the biggest layout that fits (1×1, a wide strip, or full).
+ * [make] builds the views for one layout. Before Android 12 the full layout is used.
+ */
+fun responsiveWidget(small: Int, wide: Int?, full: Int, make: (layout: Int) -> android.widget.RemoteViews): android.widget.RemoteViews {
+    if (android.os.Build.VERSION.SDK_INT < 31) return make(full)
+    val map = linkedMapOf(android.util.SizeF(30f, 30f) to make(small))
+    if (wide != null) map[android.util.SizeF(150f, 30f)] = make(wide)
+    map[android.util.SizeF(110f, 105f)] = make(full)
+    return android.widget.RemoteViews(map)
+}
+
+
+/** A light tap the user can feel, following the phone's touch-feedback setting. */
+fun android.view.View.tick() { performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }

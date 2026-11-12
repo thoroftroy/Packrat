@@ -1,5 +1,11 @@
 # Packrat changelog
 
+## v0.5.2
+
+- Smoother everywhere: new screens, tabs and Settings ease in instead of snapping, and buttons, tabs, chips and switches give a light tap you can feel (following your phone's touch-feedback setting)
+- Android's predictive back: the back gesture shows a live preview of where you're going
+- Super look: tap sparkles now match Bliss Player: soft glowing sparks with trails, drifting rainbow colours and a faint aurora, instead of big solid circles
+
 ## v0.5.1
 
 - Much faster and smoother: the app is now built optimised (the way Play Store apps are), so screens open quicker, scrolling is fluid and the APK is about a quarter of the size
