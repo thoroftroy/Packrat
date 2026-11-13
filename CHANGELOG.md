@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.4
+
+- Fixes from a full round of stress testing on every screen
+
 ## v0.5.3
 
 - Tap the tab you're already on to glide back to the top of its list
