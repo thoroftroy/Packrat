@@ -1218,18 +1218,44 @@ class WidgetPrefs(c: Context, private val id: Int) {
 }
 
 /** How a widget sits on the wallpaper. */
-enum class WidgetLook(val label: String) { GLASS("Light glass"), DARK("Dark glass"), CLEAR("No background") }
+enum class WidgetLook(val label: String) {
+    GLASS("Light glass"), DARK("Dark glass"), CLEAR("No background"), BLISS("Bliss blue"), SUPER("Super neon"), SUITE("Match my Wonderdesk look")
+}
+
+/** The app's Context from anywhere (widgets build their views without one at hand). */
+internal val widgetApp: Context? get() = runCatching { Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as Context }.getOrNull()
+
+/** [WidgetLook.SUITE] becomes the look set in Control Room; every other look stays as it is. */
+fun WidgetLook.resolved(): WidgetLook = if (this != WidgetLook.SUITE) this else when (widgetApp?.let { runCatching { GlobalAppearance.read(it)?.first }.getOrNull() }) {
+    WonderLook.BLISS -> WidgetLook.BLISS; WonderLook.DARK -> WidgetLook.DARK; WonderLook.SUPER -> WidgetLook.SUPER; else -> WidgetLook.GLASS
+}
+
+/** Background drawable for [look]: the app's three standard ones, or the Bliss/Super ones (dark glass if the app has none). */
+fun widgetBackground(look: WidgetLook, bgs: Triple<Int, Int, Int>): Int {
+    fun named(n: String) = widgetApp?.let { c -> c.resources.getIdentifier(n, "drawable", c.packageName) }?.takeIf { it != 0 }
+    return when (look.resolved()) {
+        WidgetLook.GLASS, WidgetLook.SUITE -> bgs.first; WidgetLook.DARK -> bgs.second; WidgetLook.CLEAR -> bgs.third
+        WidgetLook.BLISS -> named("wd_widget_bg_bliss") ?: bgs.second; WidgetLook.SUPER -> named("wd_widget_bg_super") ?: bgs.second
+    }
+}
+
+/** Main and secondary text colours on [look]'s background. */
+fun widgetInk(look: WidgetLook): Pair<Int, Int> = when (look.resolved()) {
+    WidgetLook.GLASS, WidgetLook.SUITE -> 0xFF1B1D21.toInt() to 0xFF6B7078.toInt()
+    WidgetLook.SUPER -> 0xFFF2ECFF.toInt() to 0xFF7DF9FF.toInt()
+    else -> 0xFFFFFFFF.toInt() to 0xDDFFFFFF.toInt()
+}
 
 /**
- * Applies [look] to a widget: background drawable plus text colours (light text on dark glass and on no background).
+ * Applies [look] to a widget: background drawable plus text colours (light text on dark, Bliss, Super and no background).
  * Each app supplies its three backgrounds and lists its main and secondary text views.
  */
 fun android.widget.RemoteViews.applyLook(look: WidgetLook, root: Int, bgs: Triple<Int, Int, Int>, primary: List<Int>, secondary: List<Int>) {
-    setInt(root, "setBackgroundResource", when (look) { WidgetLook.GLASS -> bgs.first; WidgetLook.DARK -> bgs.second; WidgetLook.CLEAR -> bgs.third })
-    val light = look != WidgetLook.GLASS
-    primary.forEach { setTextColor(it, if (light) 0xFFFFFFFF.toInt() else 0xFF1B1D21.toInt()) }
-    secondary.forEach { setTextColor(it, if (light) 0xDDFFFFFF.toInt() else 0xFF6B7078.toInt()) }
-    if (look == WidgetLook.CLEAR) (primary + secondary).forEach { runCatching { setFloat(it, "setShadowLayerRadius", 6f) } }
+    setInt(root, "setBackgroundResource", widgetBackground(look, bgs))
+    val (ink, sub) = widgetInk(look)
+    primary.forEach { setTextColor(it, ink) }
+    secondary.forEach { setTextColor(it, sub) }
+    if (look.resolved() == WidgetLook.CLEAR) (primary + secondary).forEach { runCatching { setFloat(it, "setShadowLayerRadius", 6f) } }
 }
 
 /**
