@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.3
+
+- Tap the tab you're already on to glide back to the top of its list
+
 ## v0.5.2
 
 - Smoother everywhere: new screens, tabs and Settings ease in instead of snapping, and buttons, tabs, chips and switches give a light tap you can feel (following your phone's touch-feedback setting)

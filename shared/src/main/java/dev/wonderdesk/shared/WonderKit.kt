@@ -163,6 +163,9 @@ data class WonderMenuItem(val label: String, val icon: ImageVector? = null, val 
 /** Shows a short message above the tab bar. Replaces permanent status text. */
 val LocalToast = staticCompositionLocalOf<(String) -> Unit> { {} }
 
+/** Counts taps on the tab that's already selected; lists use it to scroll back to the top (see [ScrollToTopOnReselect]). */
+val LocalTabReselect = staticCompositionLocalOf<State<Int>> { mutableIntStateOf(0) }
+
 /** Opens the built-in Settings & About page. */
 val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> { {} }
 
@@ -196,6 +199,7 @@ fun WonderApp(
     menu: List<WonderMenuItem> = emptyList(),
     settings: (@Composable ColumnScope.() -> Unit)? = null,
     showChrome: Boolean = true,
+    needs: List<WonderNeed> = emptyList(),
     content: @Composable BoxScope.() -> Unit,
 ) {
     WonderKitTheme {
@@ -205,11 +209,14 @@ fun WonderApp(
         val density = LocalDensity.current.density
         val fx = remember { WonderMotionField() }
         val toast = remember { ToastState() }
+        val reselect = remember { mutableIntStateOf(0) }
+        val tabClick: (String) -> Unit = { k -> if (k == selectedTab) reselect.intValue++; onTab(k) }
         var settingsOpen by rememberSaveable { mutableStateOf(false) }
         BackHandler(enabled = settingsOpen) { settingsOpen = false }
         if (onBack != null) BackHandler(enabled = !settingsOpen) { onBack() }
         CompositionLocalProvider(
             LocalToast provides toast::show,
+            LocalTabReselect provides reselect,
             LocalOpenSettings provides { settingsOpen = true },
             LocalContentColor provides p.text,
         ) {
@@ -222,7 +229,7 @@ fun WonderApp(
                 if (settingsOpen) {
                     Column(Modifier.fillMaxSize().wonderEnter(motion, "settings")) {
                         WonderToolbar("Settings", null, onBack = { settingsOpen = false }, appIcon = false) {}
-                        SettingsPage(appName, about, settings)
+                        SettingsPage(appName, about, settings, needs)
                     }
                 } else {
                     // Landscape on a phone: tabs move to a rail on the left so the content keeps its height.
@@ -233,15 +240,16 @@ fun WonderApp(
                             actions()
                             OverflowMenu(menu + listOf(WonderMenuItem("Settings", WonderIcons.Settings) { settingsOpen = true }))
                         }
+                        if (showChrome) NeedsBanner(needs)
                         Row(Modifier.weight(1f).fillMaxWidth()) {
-                            if (rail) WonderTabRail(tabs, selectedTab, onTab)
+                            if (rail) WonderTabRail(tabs, selectedTab, tabClick)
                             Box(Modifier.weight(1f).fillMaxHeight().then(if (tabs.isEmpty() || !showChrome || rail) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
                                 // New screens and tabs ease in instead of snapping.
                                 Box(Modifier.fillMaxSize().wonderEnter(motion, selectedTab)) { content() }
                                 ToastHost(toast, Modifier.align(Alignment.BottomCenter))
                             }
                         }
-                        if (tabs.isNotEmpty() && showChrome && !rail) WonderTabBar(tabs, selectedTab, onTab)
+                        if (tabs.isNotEmpty() && showChrome && !rail) WonderTabBar(tabs, selectedTab, tabClick)
                     }
                 }
                 WonderFxOverlay(fx)
@@ -430,7 +438,7 @@ private fun CrashPrompt(appName: String) {
 /* -------------------------------------- settings page ------------------------------------- */
 
 @Composable
-private fun SettingsPage(appName: String, about: String, extra: (@Composable ColumnScope.() -> Unit)?) {
+private fun SettingsPage(appName: String, about: String, extra: (@Composable ColumnScope.() -> Unit)?, needs: List<WonderNeed> = emptyList()) {
     val context = LocalContext.current
     val p = wonderPalette()
     val setLook = LocalLookPreference.current
@@ -442,6 +450,7 @@ private fun SettingsPage(appName: String, about: String, extra: (@Composable Col
     val icon = remember { context.appArt(192) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         extra?.invoke(this)
+        NeedsSettings(needs)
         val follows = LocalFollowsSuite.current
         val setFollow = LocalFollowSuitePreference.current
         val suiteInstalled = remember { GlobalAppearance.read(context) != null }
@@ -1050,12 +1059,21 @@ object SpecialAccess {
     /** These may be blocked as "restricted settings" for sideloaded apps on Android 13 and newer. */
     fun canBeRestricted(kind: Kind) = android.os.Build.VERSION.SDK_INT >= 33 && kind in setOf(Kind.ACCESSIBILITY, Kind.NOTIFICATIONS, Kind.USAGE)
 
-    /** Whether Android has already let this app use restricted settings (null when it can't tell). */
+    /**
+     * True only when Android has clearly let this app use restricted settings. Android 15 and newer no longer
+     * report a block here (the app op stays "default" while the switch is still greyed out), so anything other
+     * than an explicit "allowed" is treated as unknown and the guide keeps showing the unlock steps.
+     */
     fun restrictedAllowed(c: Context): Boolean? = if (android.os.Build.VERSION.SDK_INT < 33) true else runCatching {
         val ops = c.getSystemService(android.app.AppOpsManager::class.java)
         val mode = ops.unsafeCheckOpNoThrow("android:access_restricted_settings", android.os.Process.myUid(), c.packageName)
-        mode == android.app.AppOpsManager.MODE_ALLOWED || mode == android.app.AppOpsManager.MODE_DEFAULT
+        if (mode == android.app.AppOpsManager.MODE_ALLOWED) true else if (mode == android.app.AppOpsManager.MODE_ERRORED || mode == android.app.AppOpsManager.MODE_IGNORED) false else null
     }.getOrNull()
+
+    /** The name Android shows for [component] in its settings lists (an accessibility or listener service), or the app's name. */
+    fun switchName(c: Context, component: Class<*>?): String = component?.let { runCatching {
+        c.packageManager.getServiceInfo(android.content.ComponentName(c, it), 0).loadLabel(c.packageManager).toString()
+    }.getOrNull() } ?: appLabel(c)
 
     fun granted(c: Context, kind: Kind, component: Class<*>? = null): Boolean = runCatching {
         when (kind) {
@@ -1113,6 +1131,11 @@ object SpecialAccess {
 /**
  * Step-by-step sheet for turning on a special permission. Checks again every time the user comes
  * back to the app and calls [onGranted] (then closes) as soon as it's on.
+ *
+ * For switches Android can block as a "restricted setting" (apps installed outside an app store), it
+ * always lays out the three steps: try the switch once so Android shows its warning, allow restricted
+ * settings from App info, then switch it on. Android gives apps no reliable way to tell whether the
+ * block applies, so the steps stay until the switch is actually on.
  */
 @Composable
 fun AccessGuide(kind: SpecialAccess.Kind, why: String, onDismiss: () -> Unit, component: Class<*>? = null, onGranted: () -> Unit = {}) {
@@ -1120,8 +1143,9 @@ fun AccessGuide(kind: SpecialAccess.Kind, why: String, onDismiss: () -> Unit, co
     val p = wonderPalette()
     val resumed = rememberIsResumed()
     var granted by remember { mutableStateOf(SpecialAccess.granted(context, kind, component)) }
-    var opened by remember { mutableStateOf(false) }
+    var step by remember { mutableIntStateOf(0) }
     var allowed by remember { mutableStateOf(SpecialAccess.restrictedAllowed(context)) }
+    val name = remember(component) { SpecialAccess.switchName(context, component) }
     LaunchedEffect(resumed) {
         if (resumed) {
             granted = SpecialAccess.granted(context, kind, component); allowed = SpecialAccess.restrictedAllowed(context)
@@ -1129,23 +1153,53 @@ fun AccessGuide(kind: SpecialAccess.Kind, why: String, onDismiss: () -> Unit, co
         }
     }
     val restricted = SpecialAccess.canBeRestricted(kind) && allowed != true
-    WonderDialog(onDismissRequest = onDismiss, title = { Text("Turn on ${kind.title}") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(why, style = MaterialTheme.typography.bodyMedium)
-            Panel {
-                ListRow("Open ${kind.settingName}", subtitle = "Find ${appLabel(context)} and switch it on", icon = WonderIcons.Settings, tint = p.accent, chevron = true,
-                    trailing = if (granted) ({ Icon(WonderIcons.CheckCircle, null, tint = p.success) }) else null,
-                    onClick = { opened = true; SpecialAccess.open(context, kind, component) })
-                if (restricted) {
-                    PanelDivider()
-                    ListRow("Greyed out or “Restricted setting”?", subtitle = "App info → ⋮ → Allow restricted settings, then step 1 again",
-                        icon = WonderIcons.Shield, tint = p.warning, chevron = true, onClick = { SpecialAccess.openAppInfo(context) })
-                }
+    @Composable fun Step(n: Int, done: Boolean, title: String, detail: String, onClick: () -> Unit) {
+        Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.Top) {
+            Box(Modifier.padding(top = 2.dp).size(28.dp).clip(CircleShape).background(if (done) p.success else p.accent), contentAlignment = Alignment.Center) {
+                if (done) Icon(WonderIcons.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                else Text("$n", color = p.onAccent, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
             }
-            if (opened && !granted) Text("Still off. Switch it on in Settings, then come back here.", style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+            }
+            Icon(WonderIcons.ChevronRight, null, Modifier.padding(top = 2.dp), tint = p.secondaryText)
+        }
+    }
+    WonderDialog(onDismissRequest = onDismiss, title = { Text(if (component != null) "Turn on “$name”" else "Turn on ${kind.title}") }, text = {
+        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(why, style = MaterialTheme.typography.bodyMedium)
+            if (!restricted) {
+                Panel {
+                    ListRow("Open ${kind.settingName}", subtitle = "Find “$name” and switch it on", icon = WonderIcons.Settings, tint = p.accent, chevron = true,
+                        trailing = if (granted) ({ Icon(WonderIcons.CheckCircle, null, tint = p.success) }) else null,
+                        onClick = { step = 1; SpecialAccess.open(context, kind, component) })
+                }
+                if (step > 0 && !granted) Text("Still off. Switch it on in Settings, then come back here.", style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+            } else {
+                Text("Android protects this switch for apps that didn't come from an app store, so it starts out greyed out. Unlocking it takes three steps, once:",
+                    style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+                Panel {
+                    Step(1, step >= 1, "Open ${kind.settingName} and tap “$name”", "It's greyed out or says “Restricted setting”. Tap OK on the message: Android only offers step 2 after you've seen it.") {
+                        step = maxOf(step, 1); SpecialAccess.open(context, kind, component) }
+                    PanelDivider(52.dp)
+                    Step(2, allowed == true || step >= 2, "Allow restricted settings", "In App info, tap ⋮ at the top right, then “Allow restricted settings”, and confirm with your PIN or fingerprint.") {
+                        step = maxOf(step, 2); SpecialAccess.openAppInfo(context) }
+                    PanelDivider(52.dp)
+                    Step(3, granted, "Switch on “$name”", "Back in ${kind.settingName}, the switch now works. Turn it on and come back here.") {
+                        step = 3; SpecialAccess.open(context, kind, component) }
+                }
+                Text("No ⋮ menu or no “Allow restricted settings” in App info? Do step 1 first, then look again. If your phone has Advanced Protection turned on, Android doesn't allow this for apps from outside the Play Store.",
+                    style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+            }
         }
     }, confirmButton = {
-        TextButton(onClick = { opened = true; SpecialAccess.open(context, kind, component) }) { Text(if (opened) "Open again" else "Open Settings") }
+        val next = if (!restricted) 1 else (step + 1).coerceAtMost(3)
+        TextButton(onClick = {
+            step = next
+            if (restricted && next == 2) SpecialAccess.openAppInfo(context) else SpecialAccess.open(context, kind, component)
+        }) { Text(if (!restricted) (if (step > 0) "Open again" else "Open Settings") else when (next) { 1 -> "Step 1"; 2 -> "Step 2"; else -> "Step 3" }) }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } })
 }
 

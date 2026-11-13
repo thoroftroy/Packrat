@@ -256,7 +256,7 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
                         color = if (path == dir) p.accent else p.text, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
                 itemsIndexed(children, key = { j, e -> "${e.path}#$j" }) { i, e ->
                     val key = e.path.trimEnd('/')
                     val sel = key in selected
