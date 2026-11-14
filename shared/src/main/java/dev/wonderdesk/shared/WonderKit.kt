@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -1210,6 +1211,9 @@ fun appLabel(c: Context): String = runCatching { c.applicationInfo.loadLabel(c.p
 /** One home-screen widget's own settings, kept by its widget id. */
 class WidgetPrefs(c: Context, private val id: Int) {
     private val p = c.getSharedPreferences("widget-settings", Context.MODE_PRIVATE)
+    // The widget being drawn on this thread, so shared styling (text colour) can read its settings.
+    init { current.set(this) }
+    companion object { internal val current = ThreadLocal<WidgetPrefs?>() }
     fun str(name: String, def: String) = p.getString("$id.$name", def) ?: def
     fun bool(name: String, def: Boolean) = p.getBoolean("$id.$name", def)
     fun int(name: String, def: Int) = p.getInt("$id.$name", def)
@@ -1252,7 +1256,9 @@ fun widgetInk(look: WidgetLook): Pair<Int, Int> = when (look.resolved()) {
  */
 fun android.widget.RemoteViews.applyLook(look: WidgetLook, root: Int, bgs: Triple<Int, Int, Int>, primary: List<Int>, secondary: List<Int>) {
     setInt(root, "setBackgroundResource", widgetBackground(look, bgs))
-    val (ink, sub) = widgetInk(look)
+    val (auto, sub) = widgetInk(look)
+    val ink = when (WidgetPrefs.current.get()?.str("ink", "auto")) { "white" -> 0xFFFFFFFF.toInt(); "dark" -> 0xFF1B1D21.toInt(); "blue" -> 0xFF1E7FE8.toInt()
+        "pink" -> 0xFFFF2E9A.toInt(); "gold" -> 0xFFE39A12.toInt(); else -> auto }
     primary.forEach { setTextColor(it, ink) }
     secondary.forEach { setTextColor(it, sub) }
     if (look.resolved() == WidgetLook.CLEAR) (primary + secondary).forEach { runCatching { setFloat(it, "setShadowLayerRadius", 6f) } }
@@ -1264,6 +1270,8 @@ fun android.widget.RemoteViews.applyLook(look: WidgetLook, root: Int, bgs: Tripl
  */
 abstract class WidgetSetupActivity : WonderActivity() {
     protected var widgetId = android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+    /** The widget this screen is setting up. */
+    val id: Int get() = widgetId
     override fun onCreate(savedInstanceState: Bundle?) {
         widgetId = intent?.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID) ?: android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
         setResult(RESULT_CANCELED, android.content.Intent().putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
@@ -1297,6 +1305,18 @@ fun WidgetLookPicker(look: WidgetLook, onChange: (WidgetLook) -> Unit) {
         WidgetLook.values().forEachIndexed { i, l ->
             if (i > 0) PanelDivider()
             ListRow(l.label, trailing = { RadioButton(look == l, { onChange(l) }) }, onClick = { onChange(l) })
+        }
+    }
+    // Text colour, for every widget: saved straight away and used the next time the widget is drawn.
+    val context = LocalContext.current
+    val id = (context as? WidgetSetupActivity)?.id ?: return
+    val prefs = remember { WidgetPrefs(context, id) }
+    var ink by remember { mutableStateOf(prefs.str("ink", "auto")) }
+    Panel(title = "Title colour") {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("auto" to "Automatic", "white" to "White", "dark" to "Dark", "blue" to "Aqua blue", "pink" to "Super pink", "gold" to "Gold").forEach { (k, l) ->
+                Chip(l, ink == k, { ink = k; prefs.put("ink" to k) })
+            }
         }
     }
 }
