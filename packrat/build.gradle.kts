@@ -21,3 +21,11 @@ tasks.register("collectRootApk") {
 afterEvaluate {
     tasks.named("assembleDebug") { finalizedBy("collectRootApk") }
 }
+
+dependencies {
+    // Password-protected ZIP (AES and ZipCrypto), 7z and RAR.
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
+    implementation("org.apache.commons:commons-compress:1.26.2")
+    implementation("org.tukaani:xz:1.9")
+    implementation("com.github.junrar:junrar:7.5.5")
+}

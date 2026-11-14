@@ -10,7 +10,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-enum class Format(val label: String) { Zip("ZIP"), Tar("TAR"), TarGz("TAR.GZ"), Gz("GZIP") }
+enum class Format(val label: String) { Zip("ZIP"), Tar("TAR"), TarGz("TAR.GZ"), Gz("GZIP"), SevenZ("7Z"), Rar("RAR") }
 
 data class Entry(val path: String, val size: Long, val compressed: Long, val time: Long, val dir: Boolean) {
     val name get() = path.trimEnd('/').substringAfterLast('/')
@@ -19,13 +19,23 @@ data class Entry(val path: String, val size: Long, val compressed: Long, val tim
 
 class ArchiveError(msg: String) : Exception(msg)
 
+/** The archive is encrypted and the password is missing or wrong. */
+class PasswordNeeded(val wrong: Boolean) : Exception(if (wrong) "That password didn't work" else "This archive needs a password")
+
 const val MAX_ENTRIES = 50_000
 const val MAX_TOTAL = 8L * 1024 * 1024 * 1024
 
 object Archives {
+    /** Password for the archive being opened (asked for when needed). */
+    @Volatile var password: String? = null
+
     fun detect(name: String, head: ByteArray): Format? {
         val n = name.lowercase()
         return when {
+            head.size >= 6 && head[0] == '7'.code.toByte() && head[1] == 'z'.code.toByte() && head[2] == 0xBC.toByte() -> Format.SevenZ
+            head.size >= 4 && head[0] == 'R'.code.toByte() && head[1] == 'a'.code.toByte() && head[2] == 'r'.code.toByte() && head[3] == '!'.code.toByte() -> Format.Rar
+            n.endsWith(".7z") -> Format.SevenZ
+            n.endsWith(".rar") -> Format.Rar
             head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() -> Format.Zip
             n.endsWith(".tar.gz") || n.endsWith(".tgz") -> Format.TarGz
             head.size >= 2 && head[0] == 0x1f.toByte() && head[1] == 0x8b.toByte() -> if (n.endsWith(".gz")) Format.Gz else Format.TarGz
@@ -46,11 +56,38 @@ object Archives {
             if (e.path.startsWith("/") || e.path.split('/').any { it == ".." }) throw ArchiveError("Blocked an unsafe path: ${e.path}")
         }
         when (format) {
-            Format.Zip -> ZipInputStream(BufferedInputStream(input)).use { z ->
+            Format.Zip -> net.lingala.zip4j.io.inputstream.ZipInputStream(BufferedInputStream(input), password?.toCharArray()).use { z ->
                 while (true) {
-                    val ze = z.nextEntry ?: break
-                    val e = Entry(ze.name, ze.size.coerceAtLeast(0), ze.compressedSize.coerceAtLeast(0), ze.time, ze.isDirectory)
+                    val ze = try { z.nextEntry } catch (ex: net.lingala.zip4j.exception.ZipException) {
+                        if (ex.type == net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD || ex.message?.contains("password", true) == true) throw PasswordNeeded(password != null) else throw ex
+                    } ?: break
+                    if (ze.isEncrypted && password == null) throw PasswordNeeded(false)
+                    val e = Entry(ze.fileName, ze.uncompressedSize.coerceAtLeast(0), ze.compressedSize.coerceAtLeast(0), net.lingala.zip4j.util.Zip4jUtil.dosToExtendedEpochTme(ze.lastModifiedTime), ze.isDirectory)
                     check(e); onEntry(e, z)
+                }
+            }
+            Format.SevenZ -> {
+                // 7z needs to jump around the file, so it's read from a temporary copy.
+                val tmp = java.io.File.createTempFile("packrat", ".7z"); try {
+                    tmp.outputStream().use { input.copyTo(it) }
+                    val f = try { org.apache.commons.compress.archivers.sevenz.SevenZFile.builder().setFile(tmp).apply { password?.let { setPassword(it.toCharArray()) } }.get() }
+                        catch (ex: org.apache.commons.compress.PasswordRequiredException) { throw PasswordNeeded(false) }
+                    f.use { z -> while (true) {
+                        val ze = try { z.nextEntry } catch (ex: org.apache.commons.compress.PasswordRequiredException) { throw PasswordNeeded(false) } catch (ex: java.io.IOException) { if (password != null) throw PasswordNeeded(true) else throw ex } ?: break
+                        val e = Entry(ze.name, ze.size, ze.size, if (ze.hasLastModifiedDate) ze.lastModifiedDate.time else 0, ze.isDirectory)
+                        check(e); onEntry(e, object : InputStream() { override fun read() = z.read(); override fun read(b: ByteArray, o: Int, l: Int) = z.read(b, o, l) })
+                    } }
+                } finally { tmp.delete() }
+            }
+            Format.Rar -> {
+                val a = try { com.github.junrar.Archive(input, password) } catch (ex: com.github.junrar.exception.UnsupportedRarV5Exception) { throw ArchiveError("This is a RAR 5 archive. Packrat can open RAR 4 and older; RAR 5 support is coming") }
+                a.use { r ->
+                    if (r.isEncrypted && password == null) throw PasswordNeeded(false)
+                    for (h in r.fileHeaders) {
+                        if (h.isEncrypted && password == null) throw PasswordNeeded(false)
+                        val e = Entry(h.fileName.replace('\\', '/'), h.fullUnpackSize, h.fullPackSize, h.mTime?.time ?: 0, h.isDirectory)
+                        check(e); onEntry(e, r.getInputStream(h))
+                    }
                 }
             }
             Format.Gz -> GZIPInputStream(BufferedInputStream(input)).use { g ->

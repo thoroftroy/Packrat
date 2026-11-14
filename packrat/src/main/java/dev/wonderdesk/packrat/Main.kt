@@ -70,6 +70,7 @@ fun PackratApp() {
     var loading by remember { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
     val toast = remember { mutableStateOf<(String) -> Unit>({}) }
+    var askPassword by remember { mutableStateOf<Pair<Uri, Boolean>?>(null) }
     fun open(uri: Uri) {
         loading = context.displayName(uri)
         scope.launch {
@@ -77,17 +78,22 @@ fun PackratApp() {
                 runCatching {
                     val name = context.displayName(uri)
                     val head = context.contentResolver.openInputStream(uri)!!.use { s -> ByteArray(512).also { var o = 0; while (o < 512) { val n = s.read(it, o, 512 - o); if (n < 0) break; o += n } } }
-                    val fmt = Archives.detect(name, head) ?: throw ArchiveError("Packrat can open ZIP, JAR, APK, TAR, TAR.GZ and GZ files. ${name.substringAfterLast('.', "This").uppercase()} isn't supported yet.")
+                    val fmt = Archives.detect(name, head) ?: throw ArchiveError("Packrat can open ZIP, 7Z, RAR, JAR, APK, TAR, TAR.GZ and GZ files. ${name.substringAfterLast('.', "This").uppercase()} isn't supported yet.")
                     val size = runCatching { context.contentResolver.openFileDescriptor(uri, "r")!!.use { it.statSize } }.getOrDefault(-1L)
                     Opened(uri, name, fmt, Archives.list(context, uri, fmt, name), size)
                 }
             }
             loading = null
             r.onSuccess { opened = it; runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }; context.addRecent(Recent(uri.toString(), it.name, System.currentTimeMillis())) }
-                .onFailure { toast.value(it.message ?: "Couldn't open that archive") }
+                .onFailure { e -> if (e is PasswordNeeded) askPassword = uri to e.wrong else toast.value(e.message ?: "Couldn't open that archive") }
         }
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(::open) }
+    askPassword?.let { (u, wrong) ->
+        InputDialog(if (wrong) "Wrong password, try again" else "This archive is locked", "Password", confirm = "Open", onDismiss = { askPassword = null; Archives.password = null }) { pw ->
+            askPassword = null; Archives.password = pw; open(u)
+        }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> Archives.password = null; open(u) } }
     val incoming by MainActivity.incoming
     LaunchedEffect(incoming) {
         val i = incoming ?: (context as ComponentActivity).intent

@@ -47,6 +47,8 @@ data class WonderNeed(
     val component: Class<*>? = null,
     val check: ((Context) -> Boolean)? = null,
     val fix: ((Context) -> Unit)? = null,
+    /** What the banner says when this is the one problem; defaults to "<title> is off". */
+    val alert: String? = null,
 ) {
     fun met(c: Context): Boolean = runCatching {
         when {
@@ -125,7 +127,7 @@ fun NeedsBanner(needs: List<WonderNeed>) {
             Icon(WonderIcons.Warning, null, tint = p.warning, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (missing.size == 1) missing.first().title + " is off" else "${missing.size} things need your OK", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold))
+                Text(if (missing.size == 1) (missing.first().alert ?: (missing.first().title + " is off")) else "${missing.size} things need your OK", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold))
                 Text(if (missing.size == 1) missing.first().why else missing.joinToString(" · ") { it.title }, style = MaterialTheme.typography.labelSmall, color = p.secondaryText, maxLines = 2)
             }
             TextButton(onClick = { if (missing.size == 1) fixer(missing.first()) else open = true }) { Text("Fix") }
