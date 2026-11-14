@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.5
+
+- Polish and fixes
+
 ## v0.5.4
 
 - Fixes from a full round of stress testing on every screen
