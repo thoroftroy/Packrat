@@ -173,13 +173,16 @@ fun WonderFxOverlay(field: WonderMotionField = remember { WonderMotionField() })
         LaunchedEffect(active, resumed, ambient, wake, w, h) {
             if (!active || !resumed) return@LaunchedEffect
             var last = 0L
-            while (isActive && (ambient || field.sparks.isNotEmpty() || field.rings.isNotEmpty())) {
+            // The Super look's drifting sparkles settle after 6 s without a touch (they still finish fading out),
+            // so a screen you're only reading costs no battery; the next tap wakes them.
+            val awakeUntil = android.os.SystemClock.uptimeMillis() + 6_000L
+            while (isActive && ((ambient && android.os.SystemClock.uptimeMillis() < awakeUntil) || field.sparks.isNotEmpty() || field.rings.isNotEmpty())) {
                 // Ambient-only periods run at half rate to save power; taps run at full vsync.
                 if (ambient && field.rings.isEmpty() && field.sparks.none { !it.ambient }) kotlinx.coroutines.delay(24L)
                 withFrameNanos { now ->
                     val dt = if (last == 0L) 0.016f else ((now - last) / 1e9f).coerceIn(0f, 0.05f)
                     last = now
-                    field.step(dt, w / density, h / density, ambient)
+                    field.step(dt, w / density, h / density, ambient && android.os.SystemClock.uptimeMillis() < awakeUntil)
                     tick = now
                 }
             }

@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.7
+
+- Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second
+
 ## v0.5.6
 
 - Changing the look in Control Room now restyles this app's widgets straight away, with no refresh or restart
