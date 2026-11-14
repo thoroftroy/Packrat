@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.6
+
+- Changing the look in Control Room now restyles this app's widgets straight away, with no refresh or restart
+
 ## v0.5.5
 
 - Polish and fixes

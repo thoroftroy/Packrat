@@ -47,3 +47,21 @@ fun refreshWidgets(c: Context, cls: Class<out android.appwidget.AppWidgetProvide
         if (ids.isNotEmpty()) c.sendBroadcast(Intent(c, cls).setAction(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE).putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, ids))
     }
 }
+
+/** Sent by Control Room to every Wonderdesk app when the suite look changes. */
+const val WONDER_APPEARANCE_CHANGED = "dev.wonderdesk.APPEARANCE_CHANGED"
+
+/** Redraws every widget this app has on the home screen when the suite look changes (and after updates). */
+class AppearanceReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(c: Context, i: Intent) {
+        GlobalAppearance.cached = null
+        val m = android.appwidget.AppWidgetManager.getInstance(c)
+        runCatching {
+            m.getInstalledProvidersForPackage(c.packageName, null).forEach { info ->
+                val ids = m.getAppWidgetIds(info.provider)
+                if (ids.isNotEmpty()) c.sendBroadcast(Intent().setComponent(info.provider).setAction(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                    .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, ids))
+            }
+        }
+    }
+}

@@ -6,5 +6,6 @@
     </queries>
     <application android:theme="@style/WonderdeskTheme" android:allowBackup="false" android:supportsRtl="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
         <provider android:name="dev.wonderdesk.shared.WonderCrashInit" android:authorities="${applicationId}.wondercrash" android:exported="false" android:initOrder="1000" />
+        <receiver android:name="dev.wonderdesk.shared.AppearanceReceiver" android:exported="true"><intent-filter><action android:name="dev.wonderdesk.APPEARANCE_CHANGED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>
     </application>
 </manifest>
