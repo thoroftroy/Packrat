@@ -124,7 +124,7 @@ private fun Home(onOpen: () -> Unit, onCreate: () -> Unit, onRecent: (Recent) ->
     Page {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BigAction("Open archive", "Browse and extract", WonderIcons.Unarchive, Color(0xFFE67E22), Modifier.weight(1f), onOpen)
-            BigAction("Create ZIP", "Pack files or folders", WonderIcons.Archive, Color(0xFF1E7FE8), Modifier.weight(1f), onCreate)
+            BigAction("Create archive", "ZIP, 7Z, TAR.GZ and more", WonderIcons.Archive, Color(0xFF1E7FE8), Modifier.weight(1f), onCreate)
         }
         if (recents.isNotEmpty()) Panel(title = "Recent archives", trailing = { TextButton(onClick = { context.prefs("packrat").edit().remove("recent").apply(); recents = emptyList() }) { Text("Clear") } }) {
             recents.forEachIndexed { i, r ->
@@ -312,6 +312,8 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
 
 /* ---------------------------------------------------- create ------------------------------------------------- */
 
+private fun kinds0(k: String) = when (k) { "7z" -> "7Z"; "tgz" -> "TAR.GZ"; "txz" -> "TAR.XZ"; "tar" -> "TAR"; else -> "ZIP" }
+
 @Composable
 private fun CreateScreen(onClose: () -> Unit) {
     val context = LocalContext.current
@@ -319,22 +321,24 @@ private fun CreateScreen(onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val sources = remember { mutableStateListOf<DocumentFile>() }
     var level by rememberSaveable { mutableIntStateOf(1) }
+    var kind by rememberSaveable { mutableStateOf("zip") }
+    var password by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("Archive") }
     var progress by remember { mutableStateOf<String?>(null) }
     val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { list -> list.mapNotNull { DocumentFile.fromSingleUri(context, it) }.forEach { if (sources.none { s -> s.uri == it.uri }) sources += it } }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { t -> t?.let { DocumentFile.fromTreeUri(context, it) }?.let { sources += it; if (name == "Archive") name = it.name ?: name } }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { out ->
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { out ->
         if (out == null) return@rememberLauncherForActivityResult
         progress = "Packing…"
         scope.launch {
-            val r = withContext(Dispatchers.IO) { runCatching { Archives.create(context, sources.toList(), out, listOf(0, 6, 9)[level]) { n, path -> scope.launch { progress = "Packing $n · ${path.substringAfterLast('/')}" } } } }
+            val r = withContext(Dispatchers.IO) { runCatching { Archives.createAs(context, sources.toList(), out, Archives.Spec(kind, if (kind == "zip") listOf(0, 1, 6, 9)[level] else listOf(1, 1, 6, 9)[level], if (kind == "zip") password else "")) { n, path -> scope.launch { progress = "Packing $n · ${path.substringAfterLast('/')}" } } } }
             progress = null
             r.onSuccess { toastRef.value("Archive saved"); context.addRecent(Recent(out.toString(), context.displayName(out), System.currentTimeMillis())); onClose() }
-                .onFailure { toastRef.value(it.message ?: "Couldn't create the archive") }
+                .onFailure { android.util.Log.e("PackratCreate", "create failed", it); toastRef.value(it.message ?: "Couldn't create the archive") }
         }
     }
-    WonderApp(appName = "Packrat", about = ABOUT, title = "Create ZIP", onBack = onClose) {
+    WonderApp(appName = "Packrat", about = ABOUT, title = "Create archive", onBack = onClose) {
         toastRef.value = LocalToast.current
         Page {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -352,11 +356,22 @@ private fun CreateScreen(onClose: () -> Unit) {
             Panel(title = "Options") {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(name, { name = it }, "Archive name")
+                    Text("Format", style = MaterialTheme.typography.titleSmall)
+                    val kinds = listOf("zip" to "ZIP", "7z" to "7Z", "tgz" to "TAR.GZ", "txz" to "TAR.XZ", "tar" to "TAR")
+                    Segmented(kinds.map { it.second }, kinds.indexOfFirst { it.first == kind }.coerceAtLeast(0)) { kind = kinds[it].first; if (kind != "zip") password = "" }
+                    Text(when (kind) {
+                        "7z" -> "7Z: the smallest result for most files, using LZMA2. Opens everywhere with 7-Zip; slower to pack."
+                        "tgz" -> "TAR.GZ: the standard on Linux and servers. Good size, very fast, and keeps file permissions and long names."
+                        "txz" -> "TAR.XZ: like TAR.GZ but smaller, because it uses LZMA. Slower to pack, great for backups."
+                        "tar" -> "TAR: just bundles files together without shrinking them. Pick it for files that are already compressed."
+                        else -> "ZIP: opens on every phone and computer without extra software. Can be protected with a password."
+                    }, style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
                     Text("Compression", style = MaterialTheme.typography.titleSmall)
-                    Segmented(listOf("Fastest", "Normal", "Smallest"), level) { level = it }
+                    if (kind == "zip") Segmented(listOf("None", "Fastest", "Normal", "Smallest"), level) { level = it } else Segmented(listOf("Fastest", "Fast", "Normal", "Smallest"), level) { level = it }
+                    if (kind == "zip") Field(password, { password = it }, "Password (optional, AES-256)")
                 }
             }
-            WButton("Create ZIP", { save.launch(name.removeSuffix(".zip") + ".zip") }, Modifier.fillMaxWidth(), icon = WonderIcons.Archive, kind = ButtonKind.Primary, enabled = sources.isNotEmpty())
+            WButton("Create ${kinds0(kind)}", { save.launch(name.removeSuffix(".zip").removeSuffix(".7z").removeSuffix(".tar.gz").removeSuffix(".tar.xz").removeSuffix(".tar") + Archives.Spec(kind, 0).ext) }, Modifier.fillMaxWidth(), icon = WonderIcons.Archive, kind = ButtonKind.Primary, enabled = sources.isNotEmpty())
         }
     }
     progress?.let { msg -> WonderDialog(onDismissRequest = {}, title = { Text(msg.substringBefore(" ·")) }, text = { AquaProgress(null, Modifier.fillMaxWidth()) }, confirmButton = {}) }

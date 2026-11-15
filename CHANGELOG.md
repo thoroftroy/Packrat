@@ -1,5 +1,10 @@
 # Packrat changelog
 
+## v0.5.9
+
+- Create archives in more formats: ZIP, 7Z, TAR.GZ, TAR.XZ and TAR, each with a plain-language explanation of when to use it
+- Choose how hard to compress (None, Fastest, Normal, Smallest) and protect a ZIP with an AES-256 password
+
 ## v0.5.8
 
 - Opens 7z archives (including password-protected ones)

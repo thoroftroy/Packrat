@@ -185,21 +185,78 @@ object Archives {
         return found
     }
 
-    /** Writes a new ZIP from picked documents (files or whole folders). */
-    fun create(context: Context, sources: List<DocumentFile>, out: Uri, level: Int, onProgress: (Int, String) -> Unit) {
-        var n = 0
-        context.contentResolver.openOutputStream(out, "wt")!!.use { os ->
-            ZipOutputStream(os.buffered()).use { z ->
-                z.setLevel(level)
-                fun add(d: DocumentFile, path: String) {
-                    if (d.isDirectory) { z.putNextEntry(ZipEntry("$path/")); z.closeEntry(); d.listFiles().forEach { add(it, "$path/${it.name}") } }
-                    else {
-                        z.putNextEntry(ZipEntry(path).apply { time = d.lastModified() })
-                        context.contentResolver.openInputStream(d.uri)!!.use { it.copyTo(z, 128 * 1024) }
-                        z.closeEntry(); n++; onProgress(n, path)
+    /** What to build: [kind] is zip, 7z, tar, tgz or txz; [level] 0 (store/fastest) to 9 (smallest). */
+    class Spec(val kind: String, val level: Int, val password: String = "") {
+        val ext get() = when (kind) { "7z" -> ".7z"; "tar" -> ".tar"; "tgz" -> ".tar.gz"; "txz" -> ".tar.xz"; else -> ".zip" }
+    }
+
+    private fun walk(sources: List<DocumentFile>): List<Pair<String, DocumentFile>> {
+        val out = ArrayList<Pair<String, DocumentFile>>()
+        fun add(d: DocumentFile, path: String) { if (d.isDirectory) d.listFiles().forEach { add(it, "$path/${it.name}") } else out += path to d }
+        sources.forEach { add(it, it.name ?: "file") }
+        return out
+    }
+
+    /** Writes a new archive (ZIP, 7Z, TAR, TAR.GZ or TAR.XZ) from picked documents (files or whole folders). */
+    fun createAs(context: Context, sources: List<DocumentFile>, out: Uri, spec: Spec, onProgress: (Int, String) -> Unit) {
+        val files = walk(sources); var n = 0
+        fun input(d: DocumentFile) = context.contentResolver.openInputStream(d.uri)!!
+        when (spec.kind) {
+            "zip" -> if (spec.password.isNotEmpty()) {
+                context.contentResolver.openOutputStream(out, "wt")!!.use { os ->
+                    net.lingala.zip4j.io.outputstream.ZipOutputStream(os.buffered(), spec.password.toCharArray()).use { z ->
+                        for ((path, d) in files) {
+                            val p = net.lingala.zip4j.model.ZipParameters().apply {
+                                fileNameInZip = path; isEncryptFiles = true; encryptionMethod = net.lingala.zip4j.model.enums.EncryptionMethod.AES
+                                aesKeyStrength = net.lingala.zip4j.model.enums.AesKeyStrength.KEY_STRENGTH_256
+                                compressionMethod = if (spec.level == 0) net.lingala.zip4j.model.enums.CompressionMethod.STORE else net.lingala.zip4j.model.enums.CompressionMethod.DEFLATE
+                                compressionLevel = when { spec.level >= 9 -> net.lingala.zip4j.model.enums.CompressionLevel.MAXIMUM; spec.level <= 1 -> net.lingala.zip4j.model.enums.CompressionLevel.FASTEST; else -> net.lingala.zip4j.model.enums.CompressionLevel.NORMAL }
+                                lastModifiedFileTime = d.lastModified()
+                            }
+                            z.putNextEntry(p); input(d).use { it.copyTo(z, 128 * 1024) }; z.closeEntry(); n++; onProgress(n, path)
+                        }
                     }
                 }
-                sources.forEach { add(it, it.name ?: "file") }
+            } else context.contentResolver.openOutputStream(out, "wt")!!.use { os ->
+                ZipOutputStream(os.buffered()).use { z ->
+                    z.setLevel(spec.level)
+                    for ((path, d) in files) {
+                        z.putNextEntry(ZipEntry(path).apply { time = d.lastModified() }); input(d).use { it.copyTo(z, 128 * 1024) }; z.closeEntry(); n++; onProgress(n, path)
+                    }
+                }
+            }
+            "7z" -> {
+                val tmp = java.io.File.createTempFile("packrat", ".7z")
+                try {
+                    org.apache.commons.compress.archivers.sevenz.SevenZOutputFile(tmp).use { z ->
+                        z.setContentMethods(listOf(org.apache.commons.compress.archivers.sevenz.SevenZMethodConfiguration(org.apache.commons.compress.archivers.sevenz.SevenZMethod.LZMA2, org.tukaani.xz.LZMA2Options(spec.level.coerceIn(1, 9)))))
+                        for ((path, d) in files) {
+                            val e = org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry().apply { name = path; size = d.length(); lastModifiedDate = java.util.Date(d.lastModified()); setHasStream(true) }
+                            z.putArchiveEntry(e)
+                            input(d).use { ins -> val buf = ByteArray(128 * 1024); while (true) { val r = ins.read(buf); if (r < 0) break; z.write(buf, 0, r) } }
+                            z.closeArchiveEntry(); n++; onProgress(n, path)
+                        }
+                        z.finish()
+                    }
+                    context.contentResolver.openOutputStream(out, "wt")!!.use { os -> tmp.inputStream().use { it.copyTo(os, 128 * 1024) } }
+                } finally { tmp.delete() }
+            }
+            else -> context.contentResolver.openOutputStream(out, "wt")!!.use { raw ->
+                val os = raw.buffered(128 * 1024)
+                val wrapped: java.io.OutputStream = when (spec.kind) {
+                    "tgz" -> org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream(os, org.apache.commons.compress.compressors.gzip.GzipParameters().apply { compressionLevel = spec.level.coerceIn(1, 9) })
+                    "txz" -> org.apache.commons.compress.compressors.xz.XZCompressorOutputStream(os, spec.level.coerceIn(0, 9))
+                    else -> os
+                }
+                org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(wrapped).use { t ->
+                    t.setLongFileMode(org.apache.commons.compress.archivers.tar.TarArchiveOutputStream.LONGFILE_POSIX)
+                    t.setBigNumberMode(org.apache.commons.compress.archivers.tar.TarArchiveOutputStream.BIGNUMBER_POSIX)
+                    for ((path, d) in files) {
+                        val e = org.apache.commons.compress.archivers.tar.TarArchiveEntry(path).apply { size = d.length(); modTime = java.util.Date(d.lastModified()) }
+                        t.putArchiveEntry(e); input(d).use { it.copyTo(t, 128 * 1024) }; t.closeArchiveEntry(); n++; onProgress(n, path)
+                    }
+                    t.finish()
+                }
             }
         }
     }
