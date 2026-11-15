@@ -1,5 +1,11 @@
 # Packrat changelog
 
+## v0.5.8
+
+- Opens 7z archives (including password-protected ones)
+- Opens RAR archives (RAR 4 and older)
+- Opens password-protected ZIPs (AES-256 and classic ZipCrypto): Packrat asks for the password, and asks again if it's wrong
+
 ## v0.5.7
 
 - Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second

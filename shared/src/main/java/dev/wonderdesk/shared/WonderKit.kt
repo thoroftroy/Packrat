@@ -156,6 +156,13 @@ abstract class WonderActivity : ComponentActivity() {
     }
 
     @Composable abstract fun Content()
+
+    /**
+     * Compose 1.6 can throw "Searching for active node in inactive hierarchy" when arrow keys or Tab move focus while a
+     * screen is closing. A key press must never crash the app, so that one case is swallowed.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        try { super.dispatchKeyEvent(event) } catch (e: IllegalStateException) { if (e.message?.contains("inactive hierarchy") == true) true else throw e }
 }
 
 data class WonderTab(val key: String, val label: String, val icon: ImageVector)
