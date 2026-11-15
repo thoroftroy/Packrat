@@ -1,5 +1,7 @@
 package dev.wonderdesk.shared
 
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.draw.drawWithContent
 import android.app.Activity
 import android.content.Context
 import android.os.Bundle
@@ -148,6 +150,7 @@ abstract class WonderActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
+        FrameworkBugGuard.install()
         if (secure) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         // Decode the app's artwork (toolbar, About) in the background so no screen waits for it.
         val app = applicationContext
@@ -304,8 +307,7 @@ fun WonderToolbar(title: String, subtitle: String?, onBack: (() -> Unit)?, appIc
                 Spacer(Modifier.width(10.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(title, color = p.toolbarText, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FitText(title, color = p.toolbarText, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp))
                 if (subtitle != null) Text(subtitle, color = p.toolbarText.copy(alpha = .72f), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             CompositionLocalProvider(LocalContentColor provides p.toolbarIcon) { actions() }
@@ -1343,3 +1345,42 @@ fun responsiveWidget(small: Int, wide: Int?, full: Int, make: (layout: Int) -> a
 
 /** A light tap the user can feel, following the phone's touch-feedback setting. */
 fun android.view.View.tick() { performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+
+/**
+ * One line of text that shrinks (down to [minSize]) instead of being cut off, so titles like
+ * "September 2026" fit next to toolbar buttons. Only if it still doesn't fit at [minSize] does it end in "…".
+ */
+@Composable
+fun FitText(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, style: androidx.compose.ui.text.TextStyle = LocalTextStyle.current,
+            minSize: androidx.compose.ui.unit.TextUnit = 12.sp) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val base = style.fontSize
+        var size by remember(text, maxWidth, base) { mutableStateOf(base) }
+        var settled by remember(text, maxWidth, base) { mutableStateOf(false) }
+        Text(text, Modifier.drawWithContent { if (settled) drawContent() }, color = color, style = style.copy(fontSize = size),
+            maxLines = 1, softWrap = false, overflow = if (size.value <= minSize.value) TextOverflow.Ellipsis else TextOverflow.Clip,
+            onTextLayout = { r ->
+                if (r.didOverflowWidth && size.value > minSize.value) size = maxOf(minSize.value, size.value * 0.9f).sp else settled = true
+            })
+    }
+}
+
+/**
+ * Keeps known Android framework bugs from closing the app. Android 14/15 can throw a NullPointerException inside
+ * ScrollCaptureConnection when a scrolling screenshot starts as a screen closes; nothing in the app is wrong, so
+ * the main loop carries on. Every other exception is rethrown and reported as a crash as usual.
+ */
+object FrameworkBugGuard {
+    @Volatile private var installed = false
+    fun install() {
+        if (installed) return
+        installed = true
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            while (true) {
+                try { android.os.Looper.loop() }
+                catch (e: Throwable) { if (!isBenign(e)) throw e; android.util.Log.w("Wonderdesk", "Ignored Android framework bug", e) }
+            }
+        }
+    }
+    fun isBenign(e: Throwable): Boolean = e is NullPointerException && e.stackTrace.take(4).any { it.className.startsWith("android.view.ScrollCaptureConnection") }
+}
