@@ -260,7 +260,7 @@ fun ZoomableImage(image: ImageBitmap?, description: String?, onTap: () -> Unit, 
                 if (scale < 1f) zoomTo(1f, Offset.Zero)
             }
         }, contentAlignment = Alignment.Center) {
-        if (image == null) CircularProgressIndicator(color = c.accent, strokeWidth = 3.dp)
+        if (image == null) LoadingStatus("Opening the picture", detail = "Loading the full size version")
         else {
             val shrink = 1f - (kotlin.math.abs(drag.value) / (box.height.coerceAtLeast(1f))) * .35f
             Image(image, description, Modifier.fillMaxSize().graphicsLayer {

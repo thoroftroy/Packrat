@@ -1,5 +1,10 @@
 # Packrat changelog
 
+## v0.5.10
+
+- Loading screens now say what they are doing instead of showing a bare spinner
+- Wording tidied so no sentence needs a dash
+
 ## v0.5.9
 
 - Create archives in more formats: ZIP, 7Z, TAR.GZ, TAR.XZ and TAR, each with a plain-language explanation of when to use it
