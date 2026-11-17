@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.12
+
+- New settings: sort files inside an archive by name, size or date, and whether folders come first
+
 ## v0.5.11
 
 - New settings: how many recent archives to remember and the compression a new archive starts with

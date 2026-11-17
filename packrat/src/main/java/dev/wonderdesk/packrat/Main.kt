@@ -114,6 +114,13 @@ fun PackratApp() {
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("Remember recent archives", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "None", 6 to "6", 12 to "12", 30 to "30").forEach { (v, n) -> Chip(n, rm == v, { rm = v; pk.edit().putInt("recentMax", v).apply(); if (v == 0) pk.edit().remove("recent").apply() }) } } }
                 PanelDivider()
+                var sb by remember { mutableIntStateOf(pk.getInt("sortBy", 0)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("Sort files inside an archive by", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Name", "Largest", "Newest").forEachIndexed { i, n -> Chip(n, sb == i, { sb = i; pk.edit().putInt("sortBy", i).apply() }) } } }
+                PanelDivider()
+                var ff by remember { mutableStateOf(pk.getBoolean("foldersFirst", true)) }
+                SwitchRow("Folders before files", ff, { ff = it; pk.edit().putBoolean("foldersFirst", it).apply() }, icon = WonderIcons.Folder, tint = Color(0xFFE39A12))
+                PanelDivider()
                 var dl by remember { mutableIntStateOf(pk.getInt("defLevel", 1)) }
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("New archives start with", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("None", "Fastest", "Normal", "Smallest").forEachIndexed { i, n -> Chip(n, dl == i, { dl = i; pk.edit().putInt("defLevel", i).apply() }) } } }
@@ -200,7 +207,9 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
             if (isDir) { val old = map[key]; map[key] = Entry("$key/", (old?.size ?: 0) + if (e.dir) 0 else e.size, 0, maxOf(old?.time ?: 0, e.time), true) }
             else map[key] = e
         }
-        map.values.sortedWith(compareByDescending<Entry> { it.dir }.thenBy { it.name.lowercase() })
+        val pk = context.prefs("packrat")
+        val by: Comparator<Entry> = when (pk.getInt("sortBy", 0)) { 1 -> compareByDescending<Entry> { it.size }; 2 -> compareByDescending<Entry> { it.time }; else -> compareBy<Entry> { it.name.lowercase() } }
+        if (pk.getBoolean("foldersFirst", true)) map.values.sortedWith(compareByDescending<Entry> { it.dir }.then(by)) else map.values.sortedWith(by)
     }
     var pendingOnly by remember { mutableStateOf<Set<String>?>(null) }
     val destPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
