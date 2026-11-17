@@ -1,0 +1,22 @@
+name: Tell phones about this release
+on:
+  release:
+    types: [published]
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Send release push
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          REPO="${{ github.event.repository.name }}"
+          TOKEN="$(gcloud auth print-access-token)"
+          curl -s -m 20 -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"message\":{\"topic\":\"releases\",\"android\":{\"priority\":\"high\",\"ttl\":\"86400s\"},\"data\":{\"repo\":\"$REPO\",\"tag\":\"$TAG\"}}}" \
+            --fail --show-error
