@@ -106,7 +106,15 @@ data class WonderPalette(
 )
 
 @Composable
-fun wonderPalette(): WonderPalette = paletteFor(LocalLook.current)
+fun wonderPalette(): WonderPalette = withAccent(paletteFor(LocalLook.current), LocalAccentOverride.current)
+
+/** A suite-wide accent colour chosen in Control Room (0 = each look's own). */
+val LocalAccentOverride = staticCompositionLocalOf { 0 }
+private fun withAccent(p: WonderPalette, argb: Int): WonderPalette {
+    if (argb == 0) return p
+    val a = Color(argb); val lum = 0.299f * a.red + 0.587f * a.green + 0.114f * a.blue
+    return p.copy(accent = a, onAccent = if (lum > .6f) Color(0xFF1B1D21) else Color.White, tabSelected = a, selection = a, toolbarIcon = if (p.dark) a else p.toolbarIcon)
+}
 
 fun paletteFor(look: WonderLook): WonderPalette = when (look) {
     WonderLook.AQUA -> WonderPalette(
@@ -155,6 +163,7 @@ abstract class WonderActivity : ComponentActivity() {
         // Decode the app's artwork (toolbar, About) in the background so no screen waits for it.
         val app = applicationContext
         Thread { runCatching { app.appArt(96); app.appArt(192) } }.start()
+        Rotation.apply(this)
         setContent { Content() }
     }
 
@@ -166,6 +175,23 @@ abstract class WonderActivity : ComponentActivity() {
      */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
         try { super.dispatchKeyEvent(event) } catch (e: IllegalStateException) { if (e.message?.contains("inactive hierarchy") == true) true else throw e }
+}
+
+/**
+ * Screen rotation for the whole suite. Phones stay upright in apps that aren't built for landscape; video, photo, reading and
+ * terminal apps rotate. Tablets always rotate. Anyone can flip it per app in Settings.
+ */
+object Rotation {
+    private val FREE = setOf("dev.wonderdesk.cinema", "dev.wonderdesk.pages", "dev.wonderdesk.memories", "dev.wonderdesk.ripple", "dev.wonderdesk.echo", "dev.wonderdesk.wayfinder")
+    private fun prefs(c: Context) = c.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    private fun tablet(c: Context) = c.resources.configuration.smallestScreenWidthDp >= 600
+    /** True when this app rotates with the phone right now. */
+    fun auto(c: Context): Boolean = tablet(c) || when (prefs(c).getInt("rotation", 0)) { 1 -> true; 2 -> false; else -> c.packageName in FREE }
+    fun set(c: Context, auto: Boolean) { prefs(c).edit().putInt("rotation", if (auto) 1 else 2).apply() }
+    fun apply(a: Activity) {
+        if (a.packageName == "dev.wonderdesk.launcher") return // the home screen has its own rotation setting
+        a.requestedOrientation = if (auto(a)) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
 }
 
 data class WonderTab(val key: String, val label: String, val icon: ImageVector)
@@ -465,6 +491,13 @@ private fun SettingsPage(appName: String, about: String, extra: (@Composable Col
         val setFollow = LocalFollowSuitePreference.current
         val suiteInstalled = remember { GlobalAppearance.read(context) != null }
         Panel(title = "Appearance", footer = if (suiteInstalled) "Control Room sets one look for every Wonderdesk app. Pick a look below to give just this app its own." else "Install Control Room to set one look for every Wonderdesk app.") {
+            run {
+                val act = context as? Activity
+                var rot by remember { mutableStateOf(Rotation.auto(context)) }
+                SwitchRow("Rotate with the phone", rot, { rot = it; Rotation.set(context, it); act?.let { a -> Rotation.apply(a) } },
+                    subtitle = "Off keeps this app upright on phones. Tablets always rotate", icon = WonderIcons.RotateRight, tint = Color(0xFF8E44AD))
+                PanelDivider(0.dp)
+            }
             if (suiteInstalled) {
                 SwitchRow("Follow Control Room", follows, setFollow, subtitle = if (follows) "Using the suite-wide look" else "This app has its own look", icon = WonderIcons.Palette, tint = Color(0xFF8E44AD))
                 PanelDivider(0.dp)
@@ -942,12 +975,17 @@ fun relativeTime(ms: Long): String {
 object GlobalAppearance {
     val URI: android.net.Uri = android.net.Uri.parse("content://dev.wonderdesk.controlroom.appearance/current")
     @Volatile var cached: Pair<WonderLook, WonderMotion>? = null
+    /** Extra suite-wide choices from Control Room: text size in percent, accent colour (0 = default). */
+    @Volatile var fontPct: Int = 100
+    @Volatile var accent: Int = 0
     fun read(context: Context): Pair<WonderLook, WonderMotion>? = readNow(context).also { cached = it }
     private fun readNow(context: Context): Pair<WonderLook, WonderMotion>? = runCatching {
         context.contentResolver.query(URI, null, null, null, null)?.use { c ->
             if (!c.moveToFirst()) return@use null
             val look = runCatching { WonderLook.valueOf(c.getString(c.getColumnIndexOrThrow("look"))) }.getOrDefault(WonderLook.AQUA)
             val motion = runCatching { WonderMotion.valueOf(c.getString(c.getColumnIndexOrThrow("motion"))) }.getOrDefault(WonderMotion.FULL)
+            c.getColumnIndex("fontPct").takeIf { it >= 0 }?.let { fontPct = c.getInt(it).coerceIn(70, 160) }
+            c.getColumnIndex("accent").takeIf { it >= 0 }?.let { accent = c.getInt(it) }
             look to motion
         }
     }.getOrNull()
@@ -969,6 +1007,7 @@ fun WonderKitTheme(content: @Composable () -> Unit) {
     var ownLook by remember { mutableStateOf(runCatching { WonderLook.valueOf(prefs.getString("look", "AQUA") ?: "AQUA") }.getOrDefault(WonderLook.AQUA)) }
     var ownMotion by remember { mutableStateOf(runCatching { WonderMotion.valueOf(prefs.getString("motion", "FULL") ?: "FULL") }.getOrDefault(WonderMotion.FULL)) }
     var global by remember { mutableStateOf(GlobalAppearance.cached ?: GlobalAppearance.read(context)) }
+    var xs by remember { mutableStateOf(GlobalAppearance.fontPct to GlobalAppearance.accent) }
     val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     DisposableEffect(owner) {
@@ -977,6 +1016,7 @@ fun WonderKitTheme(content: @Composable () -> Unit) {
             if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) scope.launch {
                 val g = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { GlobalAppearance.read(context) }
                 if (g != global) global = g
+                val nx = GlobalAppearance.fontPct to GlobalAppearance.accent; if (nx != xs) xs = nx
             }
         }
         owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
@@ -991,14 +1031,15 @@ fun WonderKitTheme(content: @Composable () -> Unit) {
             }
         }
     }
-    val p = paletteFor(look)
+    val p = withAccent(paletteFor(look), if (follow) xs.second else 0)
     val colors = if (p.dark) darkColorScheme(primary = p.accent, onPrimary = p.onAccent, secondary = p.accent, background = p.window, surface = p.panel, onSurface = p.text, onBackground = p.text, outline = p.panelBorder, surfaceVariant = p.window, onSurfaceVariant = p.secondaryText, error = p.danger)
                  else lightColorScheme(primary = p.accent, onPrimary = p.onAccent, secondary = p.accent, background = p.window, surface = p.panel, onSurface = p.text, onBackground = p.text, outline = p.panelBorder, surfaceVariant = p.window, onSurfaceVariant = p.secondaryText, error = p.danger)
     CompositionLocalProvider(
         LocalLook provides look, LocalMotion provides motion, LocalIsDark provides p.dark,
         LocalLookPreference provides { l -> ownLook = l; follow = false; prefs.edit().putString("look", l.name).putBoolean("follow_suite", false).apply() },
         LocalMotionPreference provides { m -> ownMotion = m; follow = false; prefs.edit().putString("motion", m.name).putBoolean("follow_suite", false).apply() },
-        LocalFollowsSuite provides follow,
+        LocalFollowsSuite provides follow, LocalAccentOverride provides (if (follow) xs.second else 0),
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(androidx.compose.ui.platform.LocalDensity.current.density, androidx.compose.ui.platform.LocalDensity.current.fontScale * xs.first / 100f),
         LocalFollowSuitePreference provides { f -> follow = f; prefs.edit().putBoolean("follow_suite", f).apply(); global = GlobalAppearance.read(context) },
     ) {
         MaterialTheme(colorScheme = colors, typography = wonderTypography(look)) {

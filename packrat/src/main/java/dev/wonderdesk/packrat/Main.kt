@@ -56,7 +56,7 @@ private fun Context.recents(): List<Recent> = runCatching {
 }.getOrDefault(emptyList())
 
 private fun Context.addRecent(r: Recent) {
-    val list = (listOf(r) + recents().filter { it.uri != r.uri }).take(12)
+    val list = (listOf(r) + recents().filter { it.uri != r.uri }).take(prefs("packrat").getInt("recentMax", 12))
     prefs("packrat").edit().putString("recent", JSONArray(list.map { JSONObject().put("uri", it.uri).put("name", it.name).put("at", it.at) }).toString()).apply()
 }
 
@@ -107,6 +107,17 @@ fun PackratApp() {
         o != null -> ArchiveScreen(o, onClose = { opened = null })
         else -> WonderApp(appName = "Packrat", about = ABOUT, actions = {
             ToolbarButton(WonderIcons.FolderOpen, "Open archive", { picker.launch(arrayOf("*/*")) })
+        }, settings = {
+            val pk = remember { context.prefs("packrat") }
+            Panel(title = "Archives") {
+                var rm by remember { mutableIntStateOf(pk.getInt("recentMax", 12)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("Remember recent archives", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "None", 6 to "6", 12 to "12", 30 to "30").forEach { (v, n) -> Chip(n, rm == v, { rm = v; pk.edit().putInt("recentMax", v).apply(); if (v == 0) pk.edit().remove("recent").apply() }) } } }
+                PanelDivider()
+                var dl by remember { mutableIntStateOf(pk.getInt("defLevel", 1)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("New archives start with", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("None", "Fastest", "Normal", "Smallest").forEachIndexed { i, n -> Chip(n, dl == i, { dl = i; pk.edit().putInt("defLevel", i).apply() }) } } }
+            }
         }) {
             toast.value = LocalToast.current
             Home(onOpen = { picker.launch(arrayOf("application/zip", "application/x-tar", "application/gzip", "application/java-archive", "application/vnd.android.package-archive", "application/octet-stream", "*/*")) },
@@ -320,7 +331,8 @@ private fun CreateScreen(onClose: () -> Unit) {
     val p = wonderPalette()
     val scope = rememberCoroutineScope()
     val sources = remember { mutableStateListOf<DocumentFile>() }
-    var level by rememberSaveable { mutableIntStateOf(1) }
+    val ctxLevel = LocalContext.current
+    var level by rememberSaveable { mutableIntStateOf(ctxLevel.prefs("packrat").getInt("defLevel", 1)) }
     var kind by rememberSaveable { mutableStateOf("zip") }
     var password by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("Archive") }
