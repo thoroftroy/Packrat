@@ -302,8 +302,8 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
         val ratio = if (total > 0 && a.bytes > 0) 100 - (a.bytes * 100 / total) else 0
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("Format" to a.format.label, "Files" to "%,d".format(files.size), "Folders" to "%,d".format(a.entries.count { it.dir }.coerceAtLeast(children.count { it.dir })),
-                "Archive size" to if (a.bytes > 0) formatBytes(a.bytes) else "Unknown", "Unpacked size" to formatBytes(total), "Space saved" to if (ratio > 0) "$ratio%" else "—",
-                "Largest file" to (files.maxByOrNull { it.size }?.let { "${it.name} (${formatBytes(it.size)})" } ?: "—")).forEach { (k, v) ->
+                "Archive size" to if (a.bytes > 0) formatBytes(a.bytes) else "Unknown", "Unpacked size" to formatBytes(total), "Space saved" to if (ratio > 0) "$ratio%" else "n/a",
+                "Largest file" to (files.maxByOrNull { it.size }?.let { "${it.name} (${formatBytes(it.size)})" } ?: "n/a")).forEach { (k, v) ->
                 Row { Text(k, Modifier.width(120.dp), color = p.secondaryText); Text(v) }
             }
         }

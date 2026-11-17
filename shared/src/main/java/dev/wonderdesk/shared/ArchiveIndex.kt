@@ -8,7 +8,7 @@ fun summarizeArchive(entries: List<ZipItem>): ArchiveSummary = ArchiveSummary(
     bytes = entries.filterNot { it.directory }.sumOf { it.bytes }
 )
 
-enum class ArchiveOrder(val label: String) { PATH("Path A–Z"), SIZE("Largest first") }
+enum class ArchiveOrder(val label: String) { PATH("Path A to Z"), SIZE("Largest first") }
 
 fun sortArchiveEntries(entries: List<ZipItem>, order: ArchiveOrder): List<ZipItem> = when (order) {
     ArchiveOrder.PATH -> entries.sortedWith(compareBy({ !it.directory }, { it.path.lowercase() }, { it.path }))
