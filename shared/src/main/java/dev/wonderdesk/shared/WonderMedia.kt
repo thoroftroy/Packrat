@@ -326,8 +326,11 @@ fun WonderVideo(uri: Uri, active: Boolean, controls: Boolean, onToggleControls: 
         else Box(Modifier.align(Alignment.Center).size(180.dp).mediaGlass(c, 36.dp, hud = true), contentAlignment = Alignment.Center) {
             Icon(WonderIcons.MusicNote, null, Modifier.size(96.dp), tint = c.ink.copy(alpha = .85f))
         }
+        // The tap handler lives as long as the video, so it must read the current state, not the value from when it started.
+        val controlsNow by androidx.compose.runtime.rememberUpdatedState(controls)
+        val toggleNow by androidx.compose.runtime.rememberUpdatedState(onToggleControls)
         Box(Modifier.fillMaxSize().pointerInput(uri) {
-            detectTapGestures(onTap = { onToggleControls(!controls) }, onDoubleTap = { o ->
+            detectTapGestures(onTap = { toggleNow(!controlsNow) }, onDoubleTap = { o ->
                 when { o.x < size.width / 3 -> { player.seekBack(); hud = "−10 s" }; o.x > size.width * 2 / 3 -> { player.seekForward(); hud = "+10 s" }; else -> toggle() }
             })
         })
