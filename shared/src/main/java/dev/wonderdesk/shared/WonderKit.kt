@@ -286,7 +286,9 @@ fun WonderApp(
                                 ToastHost(toast, Modifier.align(Alignment.BottomCenter))
                             }
                         }
-                        if (tabs.isNotEmpty() && showChrome && !rail) WonderTabBar(tabs, selectedTab, tabClick)
+                        // With the keyboard up the tab bar steps aside, so the content isn't left with a tab-bar-sized gap above the keyboard.
+                        val imeUp = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+                        if (tabs.isNotEmpty() && showChrome && !rail && !imeUp) WonderTabBar(tabs, selectedTab, tabClick)
                     }
                 }
                 WonderFxOverlay(fx)

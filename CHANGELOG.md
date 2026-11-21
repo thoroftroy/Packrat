@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.5.13
+
+- Fixed a gap above the keyboard in screens with a bottom tab bar: the tab bar now steps aside while you type, so you can see what you are writing
+
 ## v0.5.12
 
 - New settings: sort files inside an archive by name, size or date, and whether folders come first
