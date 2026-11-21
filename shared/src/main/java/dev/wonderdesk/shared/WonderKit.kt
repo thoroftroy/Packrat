@@ -263,6 +263,7 @@ fun WonderApp(
                     .background(p.window)
             ) {
                 WonderBackdrop(look, motion, false)
+                if (motion != WonderMotion.OFF && look != WonderLook.DARK) WonderSceneBackdrop(look, motion, appName)
                 if (settingsOpen) {
                     Column(Modifier.fillMaxSize().wonderEnter(motion, "settings")) {
                         WonderToolbar("Settings", null, onBack = { settingsOpen = false }, appIcon = false) {}
@@ -662,6 +663,8 @@ fun ListRow(
     selected: Boolean = false,
     danger: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    /** A short plain-language explanation. Shows a small ? next to the title; tapping it explains what this does and why, without cluttering the screen. */
+    help: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val p = wonderPalette()
@@ -677,7 +680,10 @@ fun ListRow(
             icon != null -> { IconTile(icon, if (danger) p.danger else tint); Spacer(Modifier.width(12.dp)) }
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (danger) p.danger else p.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge, color = if (danger) p.danger else p.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (help != null) HelpDot(title, help)
+            }
             if (!subtitle.isNullOrEmpty()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = p.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         if (trailing != null) { Spacer(Modifier.width(8.dp)); trailing() }
@@ -686,12 +692,24 @@ fun ListRow(
 }
 
 @Composable
-fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit, subtitle: String? = null, icon: ImageVector? = null, tint: Color = Color(0xFF1E7FE8)) {
+fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit, subtitle: String? = null, icon: ImageVector? = null, tint: Color = Color(0xFF1E7FE8), help: String? = null) {
     val p = wonderPalette()
     val view = LocalView.current
-    ListRow(title, subtitle = subtitle, icon = icon, tint = tint, onClick = { view.tick(); onChange(!checked) }, trailing = {
+    ListRow(title, subtitle = subtitle, icon = icon, tint = tint, help = help, onClick = { view.tick(); onChange(!checked) }, trailing = {
         Switch(checked, { view.tick(); onChange(it) }, colors = SwitchDefaults.colors(checkedTrackColor = if (p.look == WonderLook.AQUA) Color(0xFF34C759) else p.accent, checkedThumbColor = Color.White))
     })
+}
+
+/** A small ? that explains a control in a sentence or two when tapped: short, plain words, never a wall of text. */
+@Composable
+fun HelpDot(title: String, text: String, modifier: Modifier = Modifier) {
+    val p = wonderPalette()
+    var open by remember { mutableStateOf(false) }
+    Box(modifier.padding(start = 6.dp).size(22.dp).clip(CircleShape).background(p.accent.copy(alpha = .14f)).clickable { open = true }, contentAlignment = Alignment.Center) {
+        Text("?", color = p.accent, style = MaterialTheme.typography.labelMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+    }
+    if (open) WonderDialog(onDismissRequest = { open = false }, title = { Text(title) }, text = { Text(text, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { open = false }) { Text("Got it") } })
 }
 
 /* ---------------------------------------- controls ---------------------------------------- */
