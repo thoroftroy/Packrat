@@ -370,6 +370,14 @@ fun OverflowMenu(items: List<WonderMenuItem>) {
     }
 }
 
+/** One-line text that gets a little smaller instead of being cut off when it doesn't fit (long tab names on narrow phones). */
+@Composable
+fun FitLabel(text: String, color: Color, style: TextStyle, modifier: Modifier = Modifier) {
+    var scale by remember(text, style.fontSize) { mutableFloatStateOf(1f) }
+    Text(text, modifier, color = color, style = style.copy(fontSize = style.fontSize * scale), maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+        onTextLayout = { if (it.didOverflowWidth && scale > .6f) scale *= .93f })
+}
+
 @Composable
 fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Unit) {
     val p = wonderPalette()
@@ -392,7 +400,7 @@ fun WonderTabBar(tabs: List<WonderTab>, selected: String, onTab: (String) -> Uni
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
             ) {
                 Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
-                Text(tab.label, color = color, style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal), maxLines = 1)
+                FitLabel(tab.label, color, MaterialTheme.typography.labelSmall.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal))
             }
         }
     }
