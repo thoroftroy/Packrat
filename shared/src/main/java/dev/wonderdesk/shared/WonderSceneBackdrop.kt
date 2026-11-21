@@ -49,10 +49,10 @@ private fun sceneLuma(b: android.graphics.Bitmap): Float {
 private class AppMotif(private val w: Int, private val h: Int, private val glyphs: List<String>) {
     private class G(var x: Float, var y: Float, val s: String, val size: Float, val speed: Float, val sway: Float, val phase: Float, val alpha: Int)
     private val rnd = java.util.Random(5)
-    private val items = List(if (glyphs.isEmpty()) 0 else 16) { make(true) }
+    private val items = List(if (glyphs.isEmpty()) 0 else 14) { make(true) }
     private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD); textAlign = android.graphics.Paint.Align.CENTER }
     private var t = 0f
-    private fun make(anywhere: Boolean) = G(rnd.nextFloat() * w, if (anywhere) rnd.nextFloat() * h else h + 30f, glyphs[rnd.nextInt(glyphs.size)], h * (.05f + rnd.nextFloat() * .06f), h * (.02f + rnd.nextFloat() * .035f), w * (.01f + rnd.nextFloat() * .02f), rnd.nextFloat() * 6.28f, 90 + rnd.nextInt(90))
+    private fun make(anywhere: Boolean) = G(rnd.nextFloat() * w, if (anywhere) rnd.nextFloat() * h else h + 30f, glyphs[rnd.nextInt(glyphs.size)], h * (.022f + rnd.nextFloat() * .026f), h * (.02f + rnd.nextFloat() * .035f), w * (.01f + rnd.nextFloat() * .02f), rnd.nextFloat() * 6.28f, 38 + rnd.nextInt(50))
     fun step(dt: Float) { t += dt; for (g in items) { g.y -= g.speed * dt; if (g.y < -g.size) { val n = make(false); g.x = n.x; g.y = n.y } } }
     fun draw(c: android.graphics.Canvas, color: Int) {
         for (g in items) { paint.color = color; paint.alpha = g.alpha; paint.textSize = g.size; c.drawText(g.s, g.x + kotlin.math.sin(t * .5f + g.phase) * g.sway, g.y, paint) }

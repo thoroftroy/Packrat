@@ -122,13 +122,13 @@ fun NeedsBanner(needs: List<WonderNeed>) {
     val missing = needs.filter { it.required && state[it] == false }
     var open by remember { mutableStateOf(false) }
     AnimatedVisibility(missing.isNotEmpty() && !hidden, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-        Row(Modifier.fillMaxWidth().background(p.warning.copy(alpha = if (p.dark) .22f else .16f)).clickable { if (missing.size == 1) fixer(missing.first()) else open = true }
+        Row(Modifier.fillMaxWidth().background(p.panel.copy(alpha = .94f)).background(p.warning.copy(alpha = if (p.dark) .22f else .16f)).clickable { if (missing.size == 1) fixer(missing.first()) else open = true }
             .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(WonderIcons.Warning, null, tint = p.warning, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(if (missing.size == 1) (missing.first().alert ?: (missing.first().title + " is off")) else "${missing.size} things need your OK", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold))
-                Text(if (missing.size == 1) missing.first().why else missing.joinToString(" · ") { it.title }, style = MaterialTheme.typography.labelSmall, color = p.secondaryText)
+                Text(if (missing.size == 1) missing.first().why else missing.joinToString(" · ") { it.title }, style = MaterialTheme.typography.labelSmall, color = p.text.copy(alpha = .78f))
             }
             TextButton(onClick = { if (missing.size == 1) fixer(missing.first()) else open = true }) { Text("Fix") }
             IconButton(onClick = { hidden = true }) { Icon(WonderIcons.Close, "Hide for now", tint = p.secondaryText, modifier = Modifier.size(18.dp)) }

@@ -370,11 +370,17 @@ fun OverflowMenu(items: List<WonderMenuItem>) {
     }
 }
 
+/** Text colour for something filled with the accent: dark on a light accent (the Super look's cyan), light on a dark one, so a selected segment or chip is always readable. */
+fun readableOnAccent(p: WonderPalette): Color {
+    val a = p.accent; val lum = .299f * a.red + .587f * a.green + .114f * a.blue
+    return if (lum > .52f) Color(0xFF0B1220) else p.onAccent
+}
+
 /** One-line text that gets a little smaller instead of being cut off when it doesn't fit (long tab names on narrow phones). */
 @Composable
-fun FitLabel(text: String, color: Color, style: TextStyle, modifier: Modifier = Modifier) {
+fun FitLabel(text: String, color: Color, style: TextStyle, modifier: Modifier = Modifier, textAlign: androidx.compose.ui.text.style.TextAlign? = null) {
     var scale by remember(text, style.fontSize) { mutableFloatStateOf(1f) }
-    Text(text, modifier, color = color, style = style.copy(fontSize = style.fontSize * scale), maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+    Text(text, modifier, color = color, style = style.copy(fontSize = style.fontSize * scale), textAlign = textAlign, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
         onTextLayout = { if (it.didOverflowWidth && scale > .6f) scale *= .93f })
 }
 
@@ -761,7 +767,7 @@ fun Segmented(options: List<String>, selected: Int, modifier: Modifier = Modifie
                     .clickable(role = Role.Tab) { onSelect(i) },
                 contentAlignment = Alignment.Center
             ) {
-                Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) p.onAccent else p.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) readableOnAccent(p) else p.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (i < options.lastIndex) Box(Modifier.width(1.dp).fillMaxHeight().background(p.fieldBorder.copy(alpha = .7f)))
         }
@@ -827,8 +833,8 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector
             .clickable { view.tick(); onClick() }.padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = if (selected) p.onAccent else p.secondaryText); Spacer(Modifier.width(6.dp)) }
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) p.onAccent else p.text, maxLines = 1)
+        if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = if (selected) readableOnAccent(p) else p.secondaryText); Spacer(Modifier.width(6.dp)) }
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) readableOnAccent(p) else p.text, maxLines = 1)
     }
 }
 
