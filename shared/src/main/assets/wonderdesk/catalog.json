@@ -40,30 +40,25 @@
     {
       "id": "memories",
       "name": "Memories",
-      "generic": "Photo Library",
+      "generic": "Photos, Videos & Screen Recorder",
       "aliases": [
-        "photo library",
         "albums",
-        "organize photos"
-      ],
-      "keywords": [
-        "photos",
-        "albums"
-      ]
-    },
-    {
-      "id": "cinema",
-      "name": "Cinema",
-      "generic": "Video Player",
-      "aliases": [
-        "video player",
+        "cinema",
         "movies",
-        "play video"
+        "organize photos",
+        "photo library",
+        "play video",
+        "record screen",
+        "screen recorder",
+        "video editor",
+        "video player"
       ],
       "keywords": [
-        "video",
+        "albums",
         "movie",
-        "mpv"
+        "mpv",
+        "photos",
+        "video"
       ]
     },
     {
