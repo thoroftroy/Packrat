@@ -36,6 +36,13 @@ object WonderScenery {
     fun hue(appName: String): Int = HUES.entries.firstOrNull { appName.contains(it.key, ignoreCase = true) }?.value ?: 0
 }
 
+/** Average brightness (0 dark to 1 bright) of a scene frame, from a coarse grid of pixels. */
+private fun sceneLuma(b: android.graphics.Bitmap): Float {
+    var sum = 0f; var n = 0
+    for (iy in 1..6) for (ix in 1..6) { val p = b.getPixel(b.width * ix / 7, b.height * iy / 7); sum += (.299f * android.graphics.Color.red(p) + .587f * android.graphics.Color.green(p) + .114f * android.graphics.Color.blue(p)) / 255f; n++ }
+    return sum / n
+}
+
 /** Small symbols that drift through an app's scene, so every app's scene is about its own subject (maths signs for Abacus, notes for Echo, arrows for Wayfinder). */
 private class AppMotif(private val w: Int, private val h: Int, private val glyphs: List<String>) {
     private class G(var x: Float, var y: Float, val s: String, val size: Float, val speed: Float, val sway: Float, val phase: Float, val alpha: Int)
@@ -102,18 +109,20 @@ fun WonderSceneBackdrop(look: WonderLook, motion: WonderMotion, appName: String)
         val motif = remember(bufs, appName) { AppMotif(w, h, motifFor(appName)) }
         val motifColor = when (look) { WonderLook.SUPER -> android.graphics.Color.rgb(255, 225, 255); WonderLook.BLISS -> android.graphics.Color.rgb(70, 78, 45); else -> android.graphics.Color.rgb(25, 80, 125) }
         val lock = remember(runner) { Any() }
+        var luma by remember(bufs) { mutableFloatStateOf(.6f) }
         var front by remember(bufs) { mutableStateOf<ImageBitmap?>(null) }
         // One still frame always; moving only when motion is full and the app is in front.
         LaunchedEffect(runner) {
             withContext(Dispatchers.Default) { synchronized(lock) { runner.update(.2f, cfg, 100, false); runner.draw(canvases[0], cfg); motif.step(.1f); motif.draw(canvases[0], motifColor) } }
-            front = bufs[0].asImageBitmap()
+            front = bufs[0].asImageBitmap(); luma = sceneLuma(bufs[0])
         }
         LaunchedEffect(runner, resumed, motion) {
             if (!resumed || motion != WonderMotion.FULL) return@LaunchedEffect
-            var back = 1; var last = System.nanoTime()
+            var back = 1; var last = System.nanoTime(); var n = 0
             while (true) {
                 val t0 = System.nanoTime(); val dt = ((t0 - last) / 1e9f).coerceIn(.01f, .2f); last = t0
                 withContext(Dispatchers.Default) { synchronized(lock) { bufs[back].eraseColor(0); runner.update(dt, cfg, 100, false); runner.draw(canvases[back], cfg); motif.step(dt); motif.draw(canvases[back], motifColor) } }
+                if (n++ % 24 == 0) luma = sceneLuma(bufs[back])
                 front = bufs[back].asImageBitmap(); back = 1 - back
                 val spent = (System.nanoTime() - t0) / 1_000_000
                 delay((42 - spent).coerceAtLeast(4))
@@ -122,7 +131,9 @@ fun WonderSceneBackdrop(look: WonderLook, motion: WonderMotion, appName: String)
         Canvas(Modifier.fillMaxSize()) {
             front?.let { drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt()), filterQuality = FilterQuality.High) }
             // A soft wash over the scene so text and panels stay easy to read.
-            drawRect(when (look) { WonderLook.SUPER -> Color(0x4D000000); WonderLook.BLISS -> Color(0xB0F4F1E4); else -> Color(0x85FFFFFF) })
+            // Brighter scenes need less wash; at night the wash gets stronger so text stays readable.
+            val a = (.46f + .38f * (1f - luma)).coerceIn(.46f, .86f)
+            drawRect(when (look) { WonderLook.SUPER -> Color(0x4D000000); WonderLook.BLISS -> Color(.957f, .945f, .894f, a); else -> Color(1f, 1f, 1f, a) })
             // Fine noise (dithering): breaks up the banding that shows as lines in big smooth gradients.
             drawRect(ShaderBrush(ImageShader(noise, TileMode.Repeated, TileMode.Repeated)))
         }
