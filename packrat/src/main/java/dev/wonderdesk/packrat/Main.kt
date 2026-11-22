@@ -192,6 +192,9 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
     var progress by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf<Pair<Int, Uri>?>(null) }
     var info by remember { mutableStateOf(false) }
+    // Unpacking: boxes tumble through a busy scene; when the files are out, a burst.
+    SceneMoodEffect(if (progress != null) SceneMood(energy = 2.4f, glyphs = listOf("▤", "▥", "▦", "↓")) else SceneMood())
+    LaunchedEffect(done) { if (done != null) WonderMood.celebrate(listOf("▦", "✓", "✦")) }
     val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     // Build the folder view: direct children of [dir], including folders implied by deeper paths.
     val children = remember(a, dir) {
@@ -346,6 +349,8 @@ private fun CreateScreen(onClose: () -> Unit) {
     var password by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("Archive") }
     var progress by remember { mutableStateOf<String?>(null) }
+    // Packing: the scene is busy while the archive is written.
+    SceneMoodEffect(if (progress != null) SceneMood(energy = 2.4f, glyphs = listOf("▦", "+", "▤", "↑")) else SceneMood(glyphs = listOf("▦", "+", "•")))
     val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { list -> list.mapNotNull { DocumentFile.fromSingleUri(context, it) }.forEach { if (sources.none { s -> s.uri == it.uri }) sources += it } }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { t -> t?.let { DocumentFile.fromTreeUri(context, it) }?.let { sources += it; if (name == "Archive") name = it.name ?: name } }

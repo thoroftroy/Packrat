@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.6.0
+
+- The background gets busy with tumbling boxes while an archive is packed or unpacked, and celebrates when the files are out
+
 ## v0.5.18
 
 - The symbols drifting in the background are smaller and fainter so they no longer crowd text; selected segments and chips are readable in every look (including Super); the warning banner at the top has a solid backing so its text is easy to read
