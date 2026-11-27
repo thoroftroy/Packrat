@@ -172,7 +172,13 @@ private fun ringSprite(n: Int): Bitmap {
 private val ADD_MODE = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.ADD)
 private fun hsv(a: Int, hue: Float, s: Float, v: Float) = Color.HSVToColor(a, floatArrayOf(((hue % 360f) + 360f) % 360f, s, v))
 
-/** Water, light shafts that sway, caustics rippling across the water, bubbles you can pop, drifting specks and now and then a fish. */
+/**
+ * Aqua: looking up through water at the sky. Every part of the day looks like itself: a rose and gold dawn with long low rays from the left,
+ * a fresh turquoise morning, a deep azure noon with short bright rays straight down, a warm golden afternoon with the rays leaning the other way,
+ * an orange and violet sunset, an indigo dusk, and a real night: almost black water, no sun rays, the moon shimmering through the surface with one
+ * pale moonbeam, and plankton that glows teal. Now and then a cloud drifts over and the light dims for a few seconds.
+ * Bubbles you can pop, drifting specks and the odd fish, as before.
+ */
 class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
     private val field = KitBubbleField(w, h, count = 30, seed = 11, popping = true)
     private class Fish(var x: Float, val y: Float, val size: Float, val dir: Int)
@@ -181,7 +187,7 @@ class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
     private var bgKey = ""
 
     private class Beam(val x: Float, val wd: Float, val sp: Float, val ph: Float, val str: Float)
-    private val beams = List(8) { Beam(.04f + it * .125f + rnd.nextFloat() * .05f, .12f + rnd.nextFloat() * .16f, .6f + rnd.nextFloat() * .9f, rnd.nextFloat() * 6.28f, .5f + rnd.nextFloat() * .5f) }
+    private val beams = List(9) { Beam(.02f + it * .115f + rnd.nextFloat() * .05f, .10f + rnd.nextFloat() * .16f, .6f + rnd.nextFloat() * .9f, rnd.nextFloat() * 6.28f, .5f + rnd.nextFloat() * .5f) }
     private val beamSprite: Bitmap = Bitmap.createBitmap(192, 512, Bitmap.Config.ARGB_8888).also { b ->
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { maskFilter = BlurMaskFilter(22f, BlurMaskFilter.Blur.NORMAL); shader = LinearGradient(0f, 0f, 0f, 512f, intArrayOf(0xFFFFFFFF.toInt(), 0x66FFFFFF, 0x00FFFFFF), floatArrayOf(0f, .5f, .95f), Shader.TileMode.CLAMP) }
         Canvas(b).drawPath(Path().apply { moveTo(80f, 0f); lineTo(112f, 0f); lineTo(170f, 512f); lineTo(22f, 512f); close() }, p)
@@ -190,12 +196,24 @@ class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
     private val causticA = android.graphics.BitmapShader(causticTile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     private val causticB = android.graphics.BitmapShader(causticTile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     private val mat = android.graphics.Matrix()
-    private val addPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = ADD_MODE }
+    private val rayPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = ADD_MODE }
+    private val motePaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = ADD_MODE }
+    private val glowPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = ADD_MODE }
     private val causticPaint = Paint().apply { xfermode = ADD_MODE }
-    private val motes = List(54) { floatArrayOf(rnd.nextFloat() * w, rnd.nextFloat() * h, m * (.003f + rnd.nextFloat() * .006f), rnd.nextFloat() * 6.28f, m * (.004f + rnd.nextFloat() * .01f)) }
-    private val moteSprite = glowSprite(48, 0xFFFFFFFF.toInt(), 0x66DFF6FF, 0x00FFFFFF)
+    private val motes = List(64) { floatArrayOf(rnd.nextFloat() * w, rnd.nextFloat() * h, m * (.003f + rnd.nextFloat() * .006f), rnd.nextFloat() * 6.28f, m * (.004f + rnd.nextFloat() * .01f)) }
+    private val moteSprite = glowSprite(48, 0xFFFFFFFF.toInt(), 0x66FFFFFF, 0x00FFFFFF)
+    private val sunSprite = glowSprite(128, 0xFFFFFFFF.toInt(), 0x88FFFFFF.toInt(), 0x22FFFFFF, 0x00FFFFFF)
     private val src = android.graphics.Rect(); private val dst = RectF()
     private val fishDir = HashMap<Fish, Int>()
+    private val fishPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val shade = Paint(Paint.ANTI_ALIAS_FLAG)
+    // A passing cloud: [cloudAt] runs from 0 to 1 while it crosses, dimming the rays and ripples in the middle.
+    private var nextCloud = 25f + rnd.nextFloat() * 30f
+    private var cloudAt = -1f
+    private var cloudLen = 12f
+    private var lastHour = 12f
+    private var filterKey = 0
+    private var moteKey = 0
 
     private fun makeCaustic(n: Int): Bitmap {
         val px = IntArray(n * n); val tw = (2 * PI / n).toFloat()
@@ -209,11 +227,16 @@ class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
 
     override fun step(dt: Float, env: KitEnv, cfg: KitSceneConfig) {
         super.step(dt, env, cfg)
+        lastHour = env.hour
         field.step(dt)
         scheduleEvents(dt, cfg, false) { val left = rnd.nextBoolean(); val f = Fish(if (left) -m * .1f else w + m * .1f, h * (.3f + rnd.nextFloat() * .4f), m * (.012f + rnd.nextFloat() * .01f), if (left) 1 else -1); fish.add(f); fishDir[f] = f.dir }
         val it = fish.iterator()
         while (it.hasNext()) { val f = it.next(); f.x += (fishDir[f] ?: 1) * m * .09f * dt; if (f.x < -m * .2f || f.x > w + m * .2f) { it.remove(); fishDir.remove(f) } }
-        for (s in motes) { s[1] -= s[4] * dt; s[0] += sin(time * .4f + s[3]) * m * .004f * dt * 8; if (s[1] < -10f) { s[1] = h + 10f; s[0] = rnd.nextFloat() * w } }
+        val night = nightness(env.hour)
+        // Plankton drifts more lazily at night.
+        for (s in motes) { s[1] -= s[4] * dt * (1f - night * .5f); s[0] += sin(time * .4f + s[3]) * m * .004f * dt * 8; if (s[1] < -10f) { s[1] = h + 10f; s[0] = rnd.nextFloat() * w } }
+        if (cloudAt >= 0f) { cloudAt += dt / cloudLen; if (cloudAt >= 1f) cloudAt = -1f }
+        else { nextCloud -= dt; if (nextCloud <= 0f) { cloudAt = 0f; cloudLen = 9f + rnd.nextFloat() * 10f; nextCloud = 40f + rnd.nextFloat() * 70f } }
     }
 
     override fun tap(x: Float, y: Float) { field.popAt(x, y) }
@@ -224,22 +247,53 @@ class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
             val b = bg ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val c = Canvas(b)
             val night = nightness(hour)
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            p.shader = LinearGradient(0f, 0f, w * .12f, h.toFloat(), intArrayOf(WATER.at(hour, 0), WATER.at(hour, 1), WATER.at(hour, 2)), floatArrayOf(0f, .45f, 1f), Shader.TileMode.CLAMP)
+            p.shader = LinearGradient(0f, 0f, w * .12f, h.toFloat(), intArrayOf(AQUA_WATER.at(hour, 0), AQUA_WATER.at(hour, 1), AQUA_WATER.at(hour, 2)), floatArrayOf(0f, .42f, 1f), Shader.TileMode.CLAMP)
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p); p.shader = null
-            val gx = w * (.3f + .4f * ((hour % 24) / 24f))
-            p.shader = RadialGradient(gx, -h * .04f, m * .8f, intArrayOf(blend(0xCCFFFFFF.toInt(), 0x554A7FD0, night), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-            c.drawCircle(gx, -h * .04f, m * .8f, p); p.shader = null
-            p.shader = LinearGradient(0f, h * .5f, 0f, h.toFloat(), Color.TRANSPARENT, 0x88000A1C.toInt(), Shader.TileMode.CLAMP); c.drawRect(0f, h * .5f, w.toFloat(), h.toFloat(), p)
+            // The deep gets properly dark at night, a little dark by day.
+            p.shader = LinearGradient(0f, h * .45f, 0f, h.toFloat(), Color.TRANSPARENT, blend(0x66000A1C, 0xD0000208.toInt(), night), Shader.TileMode.CLAMP); c.drawRect(0f, h * .45f, w.toFloat(), h.toFloat(), p)
             bg = b; bgKey = key
         }
         return bg!!
     }
 
+    /** Where the sun is: -1 low on the left (morning) through 0 overhead to 1 low on the right (evening), and how high (0 to 1). */
+    private fun sunSide(hour: Float) = (((hour - 6.5f) / (18.3f - 6.5f)) * 2f - 1f).coerceIn(-1.15f, 1.15f)
+    private fun sunHeight(hour: Float) = sin(PI.toFloat() * ((hour - 6.5f) / (18.3f - 6.5f)).coerceIn(0f, 1f))
+    /** The moon crosses the night the same way, left to right. */
+    private fun moonSide(hour: Float): Float { val t = (((hour - 19.5f) + 24f) % 24f) / 11f; return (t * 2f - 1f).coerceIn(-1f, 1f) }
+
+    private fun tintFilter(color: Int) = android.graphics.LightingColorFilter(color and 0xFFFFFF, 0)
+
     override fun draw(c: Canvas, env: KitEnv, cfg: KitSceneConfig) {
-        val night = nightness(env.hour); val lit = 1f - night * .65f
-        c.drawBitmap(water(env.hour), 0f, 0f, null)
-        // caustics: two layers of drifting net, fading out with depth
-        val reach = h * .75f
+        val hour = env.hour
+        val night = nightness(hour); val day = 1f - night
+        val height = sunHeight(hour); val side = sunSide(hour)
+        // A cloud dims the light smoothly in and out as it passes.
+        val cloud = if (cloudAt >= 0f) 1f - .62f * sin(PI.toFloat() * cloudAt).let { it * it } * day else 1f
+        val rayColor = AQUA_RAYS.at(hour, 0)
+        c.drawBitmap(water(hour), 0f, 0f, null)
+
+        // The sun's (or by night the moon's) glow seen through the surface.
+        src.set(0, 0, sunSprite.width, sunSprite.height)
+        if (day > .02f) {
+            val sx = w * (.5f + .44f * side); val r = m * (.38f + .42f * height)
+            glowPaint.colorFilter = tintFilter(rayColor); glowPaint.alpha = (day * cloud * (105f + 35f * height)).toInt().coerceIn(0, 255)
+            dst.set(sx - r, -r * .9f, sx + r, r * .55f); c.drawBitmap(sunSprite, src, dst, glowPaint)
+        }
+        if (night > .02f) {
+            val mx = w * (.5f + .38f * moonSide(hour)); val r = m * .07f
+            // The moon wobbles with the surface ripples, a bright smudge rather than a crisp disc.
+            val wob = sin(time * 1.3f) * r * .18f
+            glowPaint.colorFilter = tintFilter(0xFFDDE8FF.toInt()); glowPaint.alpha = (night * 235f).toInt()
+            dst.set(mx - r * 1.3f + wob, m * .012f, mx + r * 1.3f - wob, m * .012f + r * 1.1f); c.drawBitmap(sunSprite, src, dst, glowPaint)
+            glowPaint.alpha = (night * 70f).toInt(); dst.set(mx - r * 5f, -r * 3f, mx + r * 5f, r * 4f); c.drawBitmap(sunSprite, src, dst, glowPaint)
+        }
+
+        // Ripples of light: strong at noon, softer at the ends of the day, a faint silver shimmer under the moon.
+        val causticStrength = (day * (.45f + .55f * height) * cloud + night * .16f).coerceIn(0f, 1f)
+        val cKey = if (night > .5f) 1 else 0
+        if (cKey != filterKey) { filterKey = cKey; causticPaint.colorFilter = if (cKey == 1) tintFilter(0xFFB8CCFF.toInt()) else null }
+        val reach = h * (.62f + .18f * height)
         for (layer in 0..1) {
             val sc = m * (if (layer == 0) .0016f else .0023f)
             mat.reset(); mat.setScale(sc, sc); mat.postTranslate(time * m * (if (layer == 0) .012f else -.016f), time * m * (if (layer == 0) .008f else .01f))
@@ -247,34 +301,79 @@ class KitAquaScene(w: Int, h: Int) : KitScene(w, h, 3) {
             sh.setLocalMatrix(mat); causticPaint.shader = sh
             val bands = 16
             for (i in 0 until bands) {
-                val f = i / bands.toFloat(); causticPaint.alpha = (78f * lit * (1f - f) * (1f - f) * (if (layer == 0) 1f else .75f)).toInt().coerceIn(0, 255)
+                val f = i / bands.toFloat(); causticPaint.alpha = (74f * causticStrength * (1f - f) * (1f - f) * (if (layer == 0) 1f else .75f)).toInt().coerceIn(0, 255)
                 c.drawRect(0f, reach * f, w.toFloat(), reach * (i + 1) / bands + 1f, causticPaint)
             }
         }
         causticPaint.shader = null
-        // light shafts, swaying and breathing
+
+        // Light shafts. They lean away from the sun (long and slanted when it is low, short and straight at noon), take its colour,
+        // and are gone at night except for one pale moonbeam.
         src.set(0, 0, beamSprite.width, beamSprite.height)
-        for (bm in beams) {
-            val x = w * bm.x + sin(time * .07f * bm.sp + bm.ph) * w * .06f
-            val a = (.4f + .6f * (sin(time * .22f * bm.sp + bm.ph) * .5f + .5f)) * lit * bm.str * .4f
-            val bw = w * bm.wd * 1.5f
-            c.save(); c.translate(x, -m * .03f); c.rotate(-9f + sin(time * .1f * bm.sp + bm.ph * 1.7f) * 6f)
-            dst.set(-bw / 2f, 0f, bw / 2f, h * .98f); addPaint.alpha = (a * 255).toInt().coerceIn(0, 255)
-            c.drawBitmap(beamSprite, src, dst, addPaint); c.restore()
+        val lean = side * 30f
+        val rays = (day * (.38f + .62f * kotlin.math.sqrt(height)) * cloud).coerceIn(0f, 1f)
+        rayPaint.colorFilter = tintFilter(rayColor)
+        if (rays > .01f) for (bm in beams) {
+            val x = w * bm.x + sin(time * .07f * bm.sp + bm.ph) * w * .06f - side * w * .08f
+            val a = (.4f + .6f * (sin(time * .22f * bm.sp + bm.ph) * .5f + .5f)) * rays * bm.str * (.3f + .08f * height)
+            val bw = w * bm.wd * (1.7f - .5f * height)
+            val len = h * (1.25f - .3f * height)
+            c.save(); c.translate(x, -m * .03f); c.rotate(lean + sin(time * .1f * bm.sp + bm.ph * 1.7f) * 5f)
+            dst.set(-bw / 2f, 0f, bw / 2f, len); rayPaint.alpha = (a * 255).toInt().coerceIn(0, 255)
+            c.drawBitmap(beamSprite, src, dst, rayPaint); c.restore()
         }
-        // specks of sea-life light drifting up
+        if (night > .5f) {
+            val mx = w * (.5f + .38f * moonSide(hour))
+            rayPaint.colorFilter = tintFilter(0xFFC8D8FF.toInt())
+            val bw = w * .22f
+            c.save(); c.translate(mx, 0f); c.rotate(moonSide(hour) * -18f + sin(time * .12f) * 3f)
+            dst.set(-bw / 2f, 0f, bw / 2f, h * .9f); rayPaint.alpha = ((night - .5f) * 2f * 70f * (.75f + .25f * sin(time * .3f))).toInt().coerceIn(0, 255)
+            c.drawBitmap(beamSprite, src, dst, rayPaint); c.restore()
+        }
+
+        // Drifting specks by day; at night the plankton glows teal and pulses.
+        val mKey = if (night > .45f) 1 else 0
+        if (mKey != moteKey) { moteKey = mKey; motePaint.colorFilter = if (mKey == 1) tintFilter(0xFF4DFFD6.toInt()) else tintFilter(0xFFE6F8FF.toInt()) }
         val sp = android.graphics.Rect(0, 0, moteSprite.width, moteSprite.height)
-        for (s in motes) { val r = s[2] * 3f; addPaint.alpha = ((.3f + .7f * (sin(time * 1.3f + s[3]) * .5f + .5f)) * 150f * lit).toInt(); dst.set(s[0] - r, s[1] - r, s[0] + r, s[1] + r); c.drawBitmap(moteSprite, sp, dst, addPaint) }
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(60, 0, 20, 40) }
+        for (s in motes) {
+            val glow = sin(time * (1.3f - night * .7f) + s[3]) * .5f + .5f
+            val r = s[2] * (3f + night * 2.2f * glow)
+            motePaint.alpha = (((.3f + .7f * glow) * 140f * (day * .9f + .2f)) + night * 120f * glow * glow).toInt().coerceIn(0, 255)
+            dst.set(s[0] - r, s[1] - r, s[0] + r, s[1] + r); c.drawBitmap(moteSprite, sp, dst, motePaint)
+        }
+        fishPaint.color = Color.argb((60 * (1f - night * .5f)).toInt(), 0, 20, 40)
         for (f in fish) {
             val d = fishDir[f] ?: 1
             c.save(); c.translate(f.x, f.y + sin(time * 2 + f.x * .01f) * f.size * .3f); c.scale(d.toFloat(), 1f)
-            c.drawPath(Path().apply { moveTo(-f.size * 2, 0f); quadTo(0f, -f.size * 1.1f, f.size * 2f, 0f); quadTo(0f, f.size * 1.1f, -f.size * 2, 0f); close() }, p)
-            c.drawPath(Path().apply { moveTo(-f.size * 1.8f, 0f); lineTo(-f.size * 3.1f, -f.size); lineTo(-f.size * 3.1f, f.size); close() }, p); c.restore()
+            c.drawPath(Path().apply { moveTo(-f.size * 2, 0f); quadTo(0f, -f.size * 1.1f, f.size * 2f, 0f); quadTo(0f, f.size * 1.1f, -f.size * 2, 0f); close() }, fishPaint)
+            c.drawPath(Path().apply { moveTo(-f.size * 1.8f, 0f); lineTo(-f.size * 3.1f, -f.size); lineTo(-f.size * 3.1f, f.size); close() }, fishPaint); c.restore()
         }
         field.draw(c)
+        // A passing cloud also leaves a soft shadow on the water.
+        if (cloud < .99f) { shade.color = Color.argb(((1f - cloud) * 70f).toInt(), 0, 10, 30); c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), shade) }
     }
 }
+
+/** Water seen from below at each part of the day: surface, middle and deep colours. Every part of the day has its own look. */
+private val AQUA_WATER = Keys(floatArrayOf(0f, 4.6f, 5.8f, 6.9f, 9f, 12.4f, 15.3f, 17.3f, 18.3f, 19.3f, 20.6f),
+    arrayOf(
+        intArrayOf(0xFF0B2552.toInt(), 0xFF06163A.toInt(), 0xFF01040F.toInt()),   // night: ink blue
+        intArrayOf(0xFF1E2C66.toInt(), 0xFF111C4A.toInt(), 0xFF02061A.toInt()),   // before dawn
+        intArrayOf(0xFFC97A9E.toInt(), 0xFF5A58A6.toInt(), 0xFF111F58.toInt()),   // dawn: rose
+        intArrayOf(0xFFE0A66A.toInt(), 0xFF3F8ECB.toInt(), 0xFF0A3272.toInt()),   // sunrise: gold
+        intArrayOf(0xFF5FD2D2.toInt(), 0xFF139FC4.toInt(), 0xFF06528E.toInt()),   // morning: turquoise
+        intArrayOf(0xFF3FB0EE.toInt(), 0xFF0A78D6.toInt(), 0xFF032E88.toInt()),   // noon: azure
+        intArrayOf(0xFF8ED3AE.toInt(), 0xFF2192A4.toInt(), 0xFF0B4076.toInt()),   // afternoon: warm, greener
+        intArrayOf(0xFFE6B062.toInt(), 0xFF4A8AA6.toInt(), 0xFF133F72.toInt()),   // golden hour
+        intArrayOf(0xFFFF8B5C.toInt(), 0xFFB2507E.toInt(), 0xFF24165C.toInt()),   // sunset: orange and magenta
+        intArrayOf(0xFF7C4AAA.toInt(), 0xFF2F2C7A.toInt(), 0xFF0A0A36.toInt()),   // dusk: violet
+        intArrayOf(0xFF27367C.toInt(), 0xFF121E52.toInt(), 0xFF03071E.toInt()),   // late dusk: indigo
+    ))
+
+/** The colour of the light shafts through the day. */
+private val AQUA_RAYS = Keys(floatArrayOf(0f, 5.6f, 6.6f, 8.5f, 12.4f, 15.5f, 17.4f, 18.4f, 19.6f),
+    arrayOf(intArrayOf(0xFFA8BCFF.toInt()), intArrayOf(0xFFFF9EB6.toInt()), intArrayOf(0xFFFFCB80.toInt()), intArrayOf(0xFFF0FFFA.toInt()), intArrayOf(0xFFFFFFFF.toInt()),
+        intArrayOf(0xFFFFF0C2.toInt()), intArrayOf(0xFFFFB45E.toInt()), intArrayOf(0xFFFF7A52.toInt()), intArrayOf(0xFF9C80FF.toInt())))
 
 /** A green hill under a sky that goes through sunrise, noon, sunset and a night of stars. Soft light and shadow drift across it. */
 class KitBlissScene(w: Int, h: Int) : KitScene(w, h, 7) {
@@ -407,6 +506,33 @@ class KitBlissScene(w: Int, h: Int) : KitScene(w, h, 7) {
 }
 
 /** Space with slow glowing nebulae, a rainbow ribbon, twinkling stars and rings of light that keep spreading out. */
+/** Super's "day": the space behind everything changes with the hour, so night, dawn, noon and sunset each look like themselves. */
+private val SUPER_SPACE = Keys(floatArrayOf(0f, 4.8f, 6.2f, 8.8f, 12.4f, 15.6f, 17.9f, 19.2f, 20.8f),
+    arrayOf(
+        intArrayOf(0xFF010208.toInt(), 0xFF050820.toInt(), 0xFF0C0828.toInt()),   // night: almost black, a hint of indigo
+        intArrayOf(0xFF06061C.toInt(), 0xFF140A34.toInt(), 0xFF2A0C3C.toInt()),   // before dawn
+        intArrayOf(0xFF1E0A30.toInt(), 0xFF5A1848.toInt(), 0xFF8C3640.toInt()),   // dawn: plum to rose
+        intArrayOf(0xFF04163A.toInt(), 0xFF0A3A60.toInt(), 0xFF16606C.toInt()),   // morning: teal
+        intArrayOf(0xFF0A1658.toInt(), 0xFF22288A.toInt(), 0xFF3C2C9E.toInt()),   // noon: bright cobalt
+        intArrayOf(0xFF120838.toInt(), 0xFF2E0E58.toInt(), 0xFF4E1268.toInt()),   // afternoon: violet
+        intArrayOf(0xFF280820.toInt(), 0xFF6A142E.toInt(), 0xFFA4422A.toInt()),   // sunset: crimson to amber
+        intArrayOf(0xFF0E0830.toInt(), 0xFF26104C.toInt(), 0xFF40104E.toInt()),   // dusk: purple
+        intArrayOf(0xFF040418.toInt(), 0xFF0A0A2E.toInt(), 0xFF180A36.toInt()),   // late evening
+    ))
+
+/** The three colours of the gas clouds through the day. */
+private val SUPER_GAS = Keys(floatArrayOf(0f, 5.4f, 6.6f, 9f, 12.4f, 15.6f, 18f, 19.4f),
+    arrayOf(
+        intArrayOf(0xFF5A6CFF.toInt(), 0xFF3A9CFF.toInt(), 0xFF8A5CFF.toInt()),   // night: cold blues
+        intArrayOf(0xFFFF6AB4.toInt(), 0xFF9A6CFF.toInt(), 0xFFFF9A7A.toInt()),   // dawn: pink, lilac, peach
+        intArrayOf(0xFFFFB46A.toInt(), 0xFFFF6A9A.toInt(), 0xFFFFE08A.toInt()),   // sunrise: gold and coral
+        intArrayOf(0xFF4AF0D8.toInt(), 0xFF4AB4FF.toInt(), 0xFF9AFFB0.toInt()),   // morning: aqua and mint
+        intArrayOf(0xFF6AA0FF.toInt(), 0xFFB46AFF.toInt(), 0xFF5AF0FF.toInt()),   // noon: electric blue and violet
+        intArrayOf(0xFFC85AFF.toInt(), 0xFFFF5AC8.toInt(), 0xFF6A7AFF.toInt()),   // afternoon: magenta and violet
+        intArrayOf(0xFFFF5A3A.toInt(), 0xFFFFA83A.toInt(), 0xFFFF3A8A.toInt()),   // sunset: red, amber, rose
+        intArrayOf(0xFF9A4AFF.toInt(), 0xFFFF4A9A.toInt(), 0xFF4A5AFF.toInt()),   // dusk: purple and pink
+    ))
+
 class KitSuperScene(w: Int, h: Int) : KitScene(w, h, 21) {
     private class Star(val x: Float, val y: Float, val r: Float, val ph: Float, val depth: Float)
     private val stars = List(200) { Star(rnd.nextFloat() * w, rnd.nextFloat() * h, .6f + rnd.nextFloat() * 1.6f, rnd.nextFloat() * 6.28f, .3f + rnd.nextFloat() * .7f) }
@@ -420,6 +546,7 @@ class KitSuperScene(w: Int, h: Int) : KitScene(w, h, 21) {
         for (i in 0 until 7) { p.color = Color.HSVToColor(255, floatArrayOf(i * 51f, .8f, 1f)); cv.drawArc(RectF(60f + i * 15f, 60f + i * 15f, 964f - i * 15f, 1000f - i * 15f), 180f, 180f, false, p) }
     }
     private var base: Bitmap? = null
+    private var baseKey = -1
     private val addPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = ADD_MODE }
     private val plain = Paint(Paint.FILTER_BITMAP_FLAG)
     private class Ring(val x: Float, val y: Float, var age: Float, val hue: Float)
@@ -436,25 +563,30 @@ class KitSuperScene(w: Int, h: Int) : KitScene(w, h, 21) {
 
     override fun tap(x: Float, y: Float) { rings.add(Ring(x, y, 0f, (time * 40f) % 360f)) }
 
-    private fun backdrop(): Bitmap {
-        if (base == null) {
-            val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val c = Canvas(b); val p = Paint()
-            p.shader = LinearGradient(0f, 0f, w * .5f, h.toFloat(), intArrayOf(0xFF07062A.toInt(), 0xFF1A0B4A.toInt(), 0xFF3A0E5C.toInt()), floatArrayOf(0f, .55f, 1f), Shader.TileMode.CLAMP)
+    private fun backdrop(hour: Float): Bitmap {
+        // Redrawn every few minutes of scene time as the colours move on, not every frame.
+        val key = (hour * 12f).toInt()
+        if (base == null || key != baseKey) {
+            val b = base ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val c = Canvas(b); val p = Paint()
+            p.shader = LinearGradient(0f, 0f, w * .5f, h.toFloat(), intArrayOf(SUPER_SPACE.at(hour, 0), SUPER_SPACE.at(hour, 1), SUPER_SPACE.at(hour, 2)), floatArrayOf(0f, .55f, 1f), Shader.TileMode.CLAMP)
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
-            base = b
+            base = b; baseKey = key
         }
         return base!!
     }
 
     override fun draw(c: Canvas, env: KitEnv, cfg: KitSceneConfig) {
         val hueBase = (time * 5f + env.hour * 12f) % 360f
-        c.drawBitmap(backdrop(), 0f, 0f, null)
+        val night = nightness(env.hour); val day = 1f - night
+        val gasK = .5f + .55f * day; val starK = .6f + .4f * night
+        c.drawBitmap(backdrop(env.hour), 0f, 0f, null)
         src.set(0, 0, nebula.width, nebula.height)
-        for (b in blobs) {
+        for ((bi, b) in blobs.withIndex()) {
             val x = b.x + sin(time * .09f * b.sp + b.ph) * m * .1f; val y = b.y + cos(time * .07f * b.sp + b.ph) * m * .1f
             val r = b.r * (1f + .08f * sin(time * .2f + b.ph))
-            addPaint.colorFilter = android.graphics.PorterDuffColorFilter(hsv(255, b.hue + hueBase, .85f, 1f), android.graphics.PorterDuff.Mode.MULTIPLY)
-            addPaint.alpha = (95 + 35 * sin(time * .3f + b.ph)).toInt(); dst.set(x - r, y - r, x + r, y + r); c.drawBitmap(nebula, src, dst, addPaint)
+            // Each cloud takes one of the hour's three colours.
+            addPaint.colorFilter = android.graphics.PorterDuffColorFilter(SUPER_GAS.at(env.hour, bi % 3), android.graphics.PorterDuff.Mode.MULTIPLY)
+            addPaint.alpha = ((95 + 35 * sin(time * .3f + b.ph)) * gasK).toInt().coerceIn(0, 255); dst.set(x - r, y - r, x + r, y + r); c.drawBitmap(nebula, src, dst, addPaint)
         }
         addPaint.colorFilter = null
         // twinkling stars drifting slowly downward, nearer ones faster
@@ -462,7 +594,7 @@ class KitSuperScene(w: Int, h: Int) : KitScene(w, h, 21) {
         for (s in stars) {
             val y = (s.y + time * m * .004f * s.depth) % h
             val tw = .4f + .6f * (sin(time * 1.8f * s.depth + s.ph) * .5f + .5f)
-            val r = s.r * 2.6f; addPaint.alpha = (255 * tw * s.depth).toInt().coerceIn(0, 255); dst.set(s.x - r, y - r, s.x + r, y + r); c.drawBitmap(star, src, dst, addPaint)
+            val r = s.r * 2.6f; addPaint.alpha = (255 * tw * s.depth * starK).toInt().coerceIn(0, 255); dst.set(s.x - r, y - r, s.x + r, y + r); c.drawBitmap(star, src, dst, addPaint)
         }
         // rainbow ribbons that breathe
         src.set(0, 0, ribbon.width, ribbon.height)

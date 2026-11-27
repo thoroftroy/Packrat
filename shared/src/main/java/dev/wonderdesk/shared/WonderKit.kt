@@ -260,6 +260,7 @@ fun WonderApp(
             Box(
                 Modifier.fillMaxSize()
                     .wonderFx(fx, motion != WonderMotion.OFF, look, motion == WonderMotion.FULL, density)
+                    .sceneTouch(motion == WonderMotion.FULL && look != WonderLook.DARK)
                     .background(p.window)
             ) {
                 WonderBackdrop(look, motion, false)

@@ -192,8 +192,12 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
     var progress by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf<Pair<Int, Uri>?>(null) }
     var info by remember { mutableStateOf(false) }
-    // Unpacking: boxes tumble through a busy scene; when the files are out, a burst.
-    SceneMoodEffect(if (progress != null) SceneMood(energy = 2.4f, glyphs = listOf("▤", "▥", "▦", "↓")) else SceneMood())
+    // Unpacking: a box for each thing in the archive (up to 14) and a stack that builds up as the files come out; then a burst.
+    var outCount by remember { mutableIntStateOf(0) }
+    val fileCount = remember(a) { a.entries.count { !it.dir } }
+    SceneFeedScope()
+    SideEffect { SceneFeed.count = fileCount.coerceAtMost(14); SceneFeed.active = progress != null }
+    SceneMoodEffect(if (progress != null) SceneMood(energy = 2.4f, glyphs = listOf("▤", "▥", "▦", "↓"), level = if (fileCount > 0) (outCount.toFloat() / fileCount).coerceIn(0f, 1f) else null) else SceneMood())
     LaunchedEffect(done) { if (done != null) WonderMood.celebrate(listOf("▦", "✓", "✦")) }
     val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     // Build the folder view: direct children of [dir], including folders implied by deeper paths.
@@ -227,7 +231,7 @@ private fun ArchiveScreen(a: Opened, onClose: () -> Unit) {
                     val root = DocumentFile.fromTreeUri(context, tree)!!
                     val folderName = a.name.substringBeforeLast(".tar").substringBeforeLast('.')
                     val target = if (only == null) (root.findFile(folderName)?.takeIf { it.isDirectory } ?: root.createDirectory(folderName) ?: root) else root
-                    Archives.extract(context, a.uri, a.format, a.name, target, only) { n, path -> scope.launch { progress = "Extracting $n · ${path.substringAfterLast('/')}" } } to tree
+                    Archives.extract(context, a.uri, a.format, a.name, target, only) { n, path -> scope.launch { progress = "Extracting $n · ${path.substringAfterLast('/')}"; outCount = n } } to tree
                 }
             }
             progress = null; selected = emptySet()
@@ -349,8 +353,10 @@ private fun CreateScreen(onClose: () -> Unit) {
     var password by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("Archive") }
     var progress by remember { mutableStateOf<String?>(null) }
-    // Packing: the scene is busy while the archive is written.
+    // Packing: a box drifts in the scene for each thing you add, and they hurry while the archive is written, flashing with each file packed.
     SceneMoodEffect(if (progress != null) SceneMood(energy = 2.4f, glyphs = listOf("▦", "+", "▤", "↑")) else SceneMood(glyphs = listOf("▦", "+", "•")))
+    SceneFeedScope()
+    SideEffect { SceneFeed.count = sources.size.coerceAtMost(14); SceneFeed.active = progress != null }
     val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { list -> list.mapNotNull { DocumentFile.fromSingleUri(context, it) }.forEach { if (sources.none { s -> s.uri == it.uri }) sources += it } }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { t -> t?.let { DocumentFile.fromTreeUri(context, it) }?.let { sources += it; if (name == "Archive") name = it.name ?: name } }
@@ -358,7 +364,7 @@ private fun CreateScreen(onClose: () -> Unit) {
         if (out == null) return@rememberLauncherForActivityResult
         progress = "Packing…"
         scope.launch {
-            val r = withContext(Dispatchers.IO) { runCatching { Archives.createAs(context, sources.toList(), out, Archives.Spec(kind, if (kind == "zip") listOf(0, 1, 6, 9)[level] else listOf(1, 1, 6, 9)[level], if (kind == "zip") password else "")) { n, path -> scope.launch { progress = "Packing $n · ${path.substringAfterLast('/')}" } } } }
+            val r = withContext(Dispatchers.IO) { runCatching { Archives.createAs(context, sources.toList(), out, Archives.Spec(kind, if (kind == "zip") listOf(0, 1, 6, 9)[level] else listOf(1, 1, 6, 9)[level], if (kind == "zip") password else "")) { n, path -> SceneFeed.beat(); scope.launch { progress = "Packing $n · ${path.substringAfterLast('/')}" } } } }
             progress = null
             r.onSuccess { toastRef.value("Archive saved"); context.addRecent(Recent(out.toString(), context.displayName(out), System.currentTimeMillis())); onClose() }
                 .onFailure { android.util.Log.e("PackratCreate", "create failed", it); toastRef.value(it.message ?: "Couldn't create the archive") }
