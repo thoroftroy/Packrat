@@ -138,6 +138,8 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
     // ---- Turning things: gears, compass, dial.
     private var spin = 0f
     private var spinV = 0f
+    private var recordSpeed = 6f
+    private var arm = 0f
     private var heading = 0f
     private var dial = 0f
     private var dialTo = 0f
@@ -169,6 +171,8 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
                 if (SceneFeed.waveOn && SceneFeed.amp > .55f && ringGap <= 0f) { ringGap = .35f; rings += Ring(w * (.25f + rnd.nextFloat() * .5f), h * .5f, 0f, 2.2f, .5f + SceneFeed.amp) }
             }
             "gears" -> spin += dt * (8f + (if (SceneFeed.active) 70f else 0f)) + spinV * dt
+            // A record turns at 33 rpm while music plays (200 degrees a second), barely drifts when paused, and spins with a flick.
+            "record" -> { recordSpeed = ease(recordSpeed, if (SceneFeed.active) 200f else 6f, dt, 1.6f); spin += dt * recordSpeed + spinV * dt; arm = ease(arm, if (SceneFeed.active) 1f else 0f, dt, 2f) }
             "compass" -> {
                 val want = SceneFeed.angle.takeIf { !it.isNaN() } ?: (sin(t * .08f) * 25f)
                 heading += ((want - heading + 540f) % 360f - 180f) * min(1f, dt * 2.2f) + spinV * dt
@@ -227,7 +231,7 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
                 bubs.filter { it.pop < 0f && hypot(it.x - x, it.y - y) < it.r + s * .05f }.forEach { it.pop = 0f }
                 if (press) rods.indexOfFirst { abs(h * it - y) < s * .06f }.takeIf { it >= 0 }?.let { slideRod(it, x / w) }
             }
-            "gears", "compass", "dial" -> {
+            "gears", "compass", "dial", "record" -> {
                 // Turn it with your finger: the drag around the middle spins it.
                 val cx = w * .5f; val cy = h * .48f
                 if (!press) { val cross = ((x - cx) * dy - (y - cy) * dx) / max(1f, hypot(x - cx, y - cy)); spinV += cross * 2.2f }
@@ -345,6 +349,30 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
                     c.drawCircle(b.x, b.y, b.r, fill); fill.shader = null
                     line.strokeWidth = s * .006f; line.color = col(1.9f); c.drawCircle(b.x, b.y, b.r, line)
                 }
+            }
+            "record" -> {
+                // A vinyl record: grooves catching the light, a coloured label, and a tone arm that lowers while music plays.
+                val cx = w * .5f; val cy = h * .5f; val r = s * .42f
+                fill.color = col(.28f); c.drawCircle(cx, cy, r, fill)
+                line.strokeWidth = s * .002f
+                for (k in 0 until 18) { line.color = white(.10f + .08f * ((k % 3) / 2f)); c.drawCircle(cx, cy, r * (.42f + .55f * k / 18f), line) }
+                // The shine stays still while the record turns under it, which is what makes it look like it spins.
+                fill.shader = android.graphics.SweepGradient(cx, cy, intArrayOf(Color.TRANSPARENT, white(.22f), Color.TRANSPARENT, Color.TRANSPARENT, white(.18f), Color.TRANSPARENT), floatArrayOf(0f, .1f, .2f, .5f, .6f, .7f))
+                c.drawCircle(cx, cy, r, fill); fill.shader = null
+                c.save(); c.rotate(spin, cx, cy)
+                fill.color = col(.75f); c.drawCircle(cx, cy, r * .3f, fill)
+                fill.color = white(.55f); c.drawCircle(cx + r * .17f, cy, r * .035f, fill)
+                text.color = white(.75f); text.textSize = s * .035f; c.drawText("BLISS", cx, cy - r * .1f, text)
+                c.restore()
+                fill.color = white(.7f); c.drawCircle(cx, cy, r * .03f, fill)
+                // Tone arm: pivots from the top right corner and swings onto the record while playing.
+                val px = cx + r * 1.05f; val py = cy - r * 1.0f
+                val ang = (-28f + 22f * arm) * PI.toFloat() / 180f
+                val len = r * 1.25f
+                val ex = px - sin(ang) * len * .35f - cos(ang) * len * .0f; val ey = py + cos(ang) * len
+                line.color = white(.6f); line.strokeWidth = s * .012f; c.drawLine(px, py, ex - len * .25f * arm, ey, line)
+                fill.color = white(.65f); c.drawCircle(px, py, s * .03f, fill)
+                rect.set(ex - len * .25f * arm - s * .03f, ey - s * .015f, ex - len * .25f * arm + s * .03f, ey + s * .035f); c.drawRect(rect, fill)
             }
             "gears" -> {
                 drawGear(c, w * .78f, h * .2f, s * .26f, 14, spin, col(.55f))
@@ -617,6 +645,7 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
         /** Which picture each app gets. */
         fun themeFor(appName: String): String? = when {
             appName.contains("Abacus", true) -> "beads"
+            appName.contains("Bliss", true) -> "record"
             appName.contains("Timepiece", true) -> "gears"
             appName.contains("Chronicle", true) -> "pages"
             appName.contains("Pages", true) -> "book"

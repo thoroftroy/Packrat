@@ -119,7 +119,7 @@ fun PackratApp() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Name", "Largest", "Newest").forEachIndexed { i, n -> Chip(n, sb == i, { sb = i; pk.edit().putInt("sortBy", i).apply() }) } } }
                 PanelDivider()
                 var ff by remember { mutableStateOf(pk.getBoolean("foldersFirst", true)) }
-                SwitchRow("Folders before files", ff, { ff = it; pk.edit().putBoolean("foldersFirst", it).apply() }, icon = WonderIcons.Folder, tint = Color(0xFFE39A12))
+                SwitchRow("Folders before files", ff, { ff = it; pk.edit().putBoolean("foldersFirst", it).apply() }, icon = WonderIcons.Folder, tint = Color(0xFFE39A12), help = "Inside an archive, folders are listed first and files after them, like most file managers do.")
                 PanelDivider()
                 var dl by remember { mutableIntStateOf(pk.getInt("defLevel", 1)) }
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("New archives start with", style = MaterialTheme.typography.labelLarge)

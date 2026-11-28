@@ -2,7 +2,7 @@
   "ecosystem": "0.3.0",
   "apps": {
     "wayfinder": "0.8.1",
-    "packrat": "0.7.1",
+    "packrat": "0.7.2",
     "memories": "0.9.1",
     "melody": "0.2.4",
     "pages": "0.7.1",
@@ -13,7 +13,7 @@
     "chronicle": "0.7.1",
     "timepiece": "0.7.1",
     "safekeeper": "0.7.1",
-    "beacon": "0.7.1",
+    "beacon": "0.7.2",
     "vault": "0.8.1",
     "control-room": "0.8.1",
     "connections": "0.2.0",
