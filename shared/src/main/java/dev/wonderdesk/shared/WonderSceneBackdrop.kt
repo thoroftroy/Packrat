@@ -391,9 +391,12 @@ fun WonderSceneBackdrop(look: WonderLook, motion: WonderMotion, appName: String)
         // One still frame always; moving only when motion is full and the app is in front.
         LaunchedEffect(runner) { runner.update(.2f, cfg, 100, false); motif.step(.1f); theme?.step(.1f); luma = daylight(runner.hour()); tick++ }
         // With motion reduced the scene is a still picture; it is redrawn when the mood changes so it still follows the app.
-        LaunchedEffect(runner, drawCfg, tint, hush, moodGlyphs) { if (motion != WonderMotion.FULL || !resumed) { motif.step(1f); theme?.step(1f); tick++ } }
-        LaunchedEffect(runner, resumed, motion) {
-            if (!resumed || motion != WonderMotion.FULL) return@LaunchedEffect
+        // Battery Saver holds the scene still too, like reduced motion.
+        val saver = rememberBatterySaver()
+        val moving = motion == WonderMotion.FULL && !saver
+        LaunchedEffect(runner, drawCfg, tint, hush, moodGlyphs, moving) { if (!moving || !resumed) { motif.step(1f); theme?.step(1f); tick++ } }
+        LaunchedEffect(runner, resumed, moving) {
+            if (!resumed || !moving) return@LaunchedEffect
             var last = 0L; var n = 0
             while (true) {
                 withFrameNanos { now ->

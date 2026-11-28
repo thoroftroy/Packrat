@@ -1,5 +1,9 @@
 # Packrat changelog
 
+## v0.7.1
+
+- The moving background holds still while Battery Saver is on, so it uses next to no power then. It still changes with what the app is doing
+
 ## v0.7.0
 
 - The background has a box for each thing you add to an archive (or each file in one you open); they hurry while it works and a stack builds up as files come out

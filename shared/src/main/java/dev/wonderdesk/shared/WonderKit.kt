@@ -1097,6 +1097,21 @@ fun rememberIsResumed(): Boolean {
     return resumed
 }
 
+/** True while Android's Battery Saver is on. Anything that only looks nice (moving backgrounds) should hold still then. */
+@Composable
+fun rememberBatterySaver(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val pm = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
+    var on by remember(context) { mutableStateOf(runCatching { pm.isPowerSaveMode }.getOrDefault(false)) }
+    DisposableEffect(context) {
+        val r = object : android.content.BroadcastReceiver() { override fun onReceive(c: android.content.Context?, i: android.content.Intent?) { on = runCatching { pm.isPowerSaveMode }.getOrDefault(false) } }
+        val f = android.content.IntentFilter(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        runCatching { if (android.os.Build.VERSION.SDK_INT >= 33) context.registerReceiver(r, f, android.content.Context.RECEIVER_NOT_EXPORTED) else @Suppress("UnspecifiedRegisterReceiverFlag") context.registerReceiver(r, f) }
+        onDispose { runCatching { context.unregisterReceiver(r) } }
+    }
+    return on
+}
+
 /**
  * The current time, refreshed every [periodMs] on the period boundary (so a minute clock flips
  * exactly on the minute) and only while the app is visible. Nothing runs in the background.

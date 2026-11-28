@@ -201,7 +201,8 @@ internal class AppThemeLayer(private val w: Int, private val h: Int, private val
             "beads" -> nextCount = 0f
             "ink" -> repeat(n) {
                 val ch = SceneFeed.typed.takeIf { !it.isWhitespace() }?.toString() ?: return@repeat
-                letters += Letter(w * (.1f + rnd.nextFloat() * .8f), h * (.8f + rnd.nextFloat() * .15f), ch, s * (.05f + rnd.nextFloat() * .05f), 0f, (rnd.nextFloat() - .5f) * 40f)
+                // Start in the middle of the screen: the bottom is behind the keyboard while you type.
+                letters += Letter(w * (.1f + rnd.nextFloat() * .8f), h * (.38f + rnd.nextFloat() * .2f), ch, s * (.08f + rnd.nextFloat() * .06f), 0f, (rnd.nextFloat() - .5f) * 40f)
                 if (letters.size > 40) letters.removeAt(0); typing = min(4f, typing + .25f)
             }
             "book" -> turn = 0f
